@@ -1,4 +1,3 @@
 stremlit
-google-generativeai
+google-genai
 python-docx
-Pillow
