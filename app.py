@@ -53,7 +53,7 @@ if st.button("Сгенерировать план урока"):
 """
             try:
                 # Используем актуальную модель Gemini flash latest
-                model = genai.GenerativeModel("gemini-flash-latest”)
+                model = genai.GenerativeModel("gemini-flash-latest")
                 response = model.generate_content(prompt)
                 
                 st.success("План урока успешно сгенерирован!")
