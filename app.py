@@ -1,85 +1,62 @@
-import time
-import io
 import streamlit as st
-from PIL import Image
 import google.generativeai as genai
-from docx import Document
 
-# Настройка API-ключа из Secrets
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+st.set_page_config(page_title="Генератор поурочных планов", page_icon="📚", layout="centered")
 
-st.set_page_config(page_title="Генератор поурочных планов", layout="centered")
+st.title("📚 Генератор поурочных планов (по стандартам КР)")
+st.write("Создание поурочных планов для учителей школ Кыргызской Республики")
 
-st.title("📚 Генератор поурочных планов по КТП")
-st.write("Загрузите фотографии вашего календарно-тематического плана, и ИИ сформирует поурочные разработки.")
+# Настройка API ключа из Secrets
+if "GEMINI_API_KEY" in st.secrets:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"].strip())
+else:
+    st.error("Ошибка: GEMINI_API_KEY не найден в Secrets!")
 
-uploaded_files = st.file_uploader(
-    "Загрузите фото КТП (одно или несколько)", 
-    type=["png", "jpg", "jpeg"], 
-    accept_multiple_files=True
-)
+# Ввод данных пользователем
+subject = st.text_input("Предмет", placeholder="например, Русский язык")
+grade = st.text_input("Класс", placeholder="например, 7 класс")
+topic = st.text_input("Тема урока", placeholder="например, Имя существительное")
 
-if uploaded_files:
-    if st.button("🚀 Сформировать поурочные планы", type="primary"):
-        
-        # Блок всплывающего окна с таймером
-        ad_modal = st.empty()
-        
-        for remaining in range(10, -1, -1):
-            with ad_modal.container():
-                st.info(f"⏳ Идёт подготовка нейросети... Пожалуйста, подождите {remaining} сек.")
-                st.markdown("---")
-                st.markdown("📢 Рекламная пауза / Полезное объявление:")
-                st.caption("Подписывайтесь на наши образовательные каналы и делитесь сервисом с коллегами-учителями!")
-                st.markdown("---")
-            time.sleep(1)
-        
-        ad_modal.empty() # Убираем окно после отсчета
+if st.button("Сгенерировать план урока"):
+    if not subject or not grade or not topic:
+        st.warning("Пожалуйста, заполните все поля: Предмет, Класс и Тему урока.")
+    else:
+        with st.spinner("Генерация подробного поурочного плана..."):
+            prompt = f"""
+Создай подробный поурочный план для школы Кыргызской Республики на основе образовательных стандартов КР.
 
-        # Основной процесс генерации
-        with st.spinner("🧠 Анализируем КТП и составляем поурочные планы..."):
+Данные урока:
+- Предмет: {subject}
+- Класс: {grade}
+- Тема урока: {topic}
+
+Структура плана должна быть следующей:
+1. Тема урока, Класс, Предмет
+2. Цели урока:
+   - Обучающая
+   - Развивающая
+   - Воспитательная
+3. Компетенции:
+   - Ключевые компетенции (Информационная, Социально-коммуникативная, Самоорганизация и разрешение проблем)
+   - Предметные компетенции
+4. Тип и форма урока, оборудование/наглядность
+5. Ход урока (с пошаговым расписанием по минутам):
+   - Организационный момент
+   - Проверка домашнего задания
+   - Актуализация знаний
+   - Объяснение нового материала
+   - Закрепление материала (практическая работа)
+   - Итоги урока и рефлексия
+   - Домашнее задание и оценивание
+
+Сделай план четким, методически грамотным и удобным для распечатки.
+"""
             try:
-                images = [Image.open(f) for f in uploaded_files]
-                model = genai.GenerativeModel('gemini-1.5-flash')
-
-                prompt = """
-                Ты — опытный методист школьного образования Кыргызской Республики.
-                Проанализируй представленные фотографии КТП (календарно-тематического плана).
-                Найди ВСЕ темы уроков и состави для каждой из них подробный поурочный план.
+                # Используем актуальную модель Gemini 2.0 Flash
+                model = genai.GenerativeModel("gemini-2.0-flash")
+                response = model.generate_content(prompt)
                 
-                Структура каждого плана:
-                1. Тема урока, класс, предмет.
-                2. Цели урока (обучающая, развивающая, воспитательная).
-                3. Ход урока (Орг. момент, Повторение, Новая тема, Закрепление, Итоги, Д/З).
-                4. Критерии оценивания.
-                
-                Выдай результат четко, красиво и структурировано.
-                """
-
-                response = model.generate_content([prompt] + images)
-                plan_text = response.text
-
-                st.success("🎉 Поурочные планы успешно сгенерированы!")
-                st.markdown("### 📋 Результат:")
-                st.write(plan_text)
-
-                # Создание Word-документа (.docx) для скачивания
-                doc = Document()
-                doc.add_heading("Поурочные планы по КТП", 0)
-                
-                for paragraph in plan_text.split("\n"):
-                    doc.add_paragraph(paragraph)
-                
-                doc_io = io.BytesIO()
-                doc.save(doc_io)
-                doc_io.seek(0)
-
-                st.download_button(
-                    label="📥 Скачать поурочные планы в Word (.docx)",
-                    data=doc_io,
-                    file_name="Поурочные_планы_КТП.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                )
-
+                st.success("План урока успешно сгенерирован!")
+                st.markdown(response.text)
             except Exception as e:
-                st.error(f"❌ Произошла ошибка при обработке: {e}")
+                st.error(f"Произошла ошибка при обработке: {e}")
