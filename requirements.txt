@@ -1,0 +1,4 @@
+stremlit
+google-generativeai
+python-docx
+Pillow
