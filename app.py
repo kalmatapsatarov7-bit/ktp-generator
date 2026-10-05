@@ -52,8 +52,8 @@ if st.button("Сгенерировать план урока"):
 Сделай план четким, методически грамотным и удобным для распечатки.
 """
             try:
-                # Используем актуальную модель Gemini 2.5 Flash
-                model = genai.GenerativeModel("gemini-2.5-flash")
+                # Используем актуальную модель Gemini 1.5 Flash
+                model = genai.GenerativeModel("gemini-1.5-flash")
                 response = model.generate_content(prompt)
                 
                 st.success("План урока успешно сгенерирован!")
