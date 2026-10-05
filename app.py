@@ -1,92 +1,85 @@
+import time
+import io
+import streamlit as st
+from PIL import Image
+import google.generativeai as genai
+from docx import Document
+
+# Настройка API-ключа из Secrets
+genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+
+st.set_page_config(page_title="Генератор поурочных планов", layout="centered")
+
+st.title("📚 Генератор поурочных планов по КТП")
+st.write("Загрузите фотографии вашего календарно-тематического плана, и ИИ сформирует поурочные разработки.")
+
+uploaded_files = st.file_uploader(
+    "Загрузите фото КТП (одно или несколько)", 
+    type=["png", "jpg", "jpeg"], 
+    accept_multiple_files=True
+)
+
 if uploaded_files:
-    if st.button("🚀 Сформировать поурочные планы на все темы с КТП", type="primary"):
+    if st.button("🚀 Сформировать поурочные планы", type="primary"):
         
-        # Контейнер для всплывающего окна
+        # Блок всплывающего окна с таймером
         ad_modal = st.empty()
         
-        # Переменная состояния для отслеживания закрытия учителем
-        if "ad_closed" not in st.session_state:
-            st.session_state.ad_closed = False
+        for remaining in range(10, -1, -1):
+            with ad_modal.container():
+                st.info(f"⏳ Идёт подготовка нейросети... Пожалуйста, подождите {remaining} сек.")
+                st.markdown("---")
+                st.markdown("📢 Рекламная пауза / Полезное объявление:")
+                st.caption("Подписывайтесь на наши образовательные каналы и делитесь сервисом с коллегами-учителями!")
+                st.markdown("---")
+            time.sleep(1)
+        
+        ad_modal.empty() # Убираем окно после отсчета
 
-        try:
-            images = [Image.open(f) for f in uploaded_files]
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            
-            prompt = """
-            Ты — опытный методист школьного образования КР.
-            Проанализируй фото КТП и найди ВСЕ темы уроков.
-            Составь для каждой темы поурочный план и верни STRICTLY JSON-массив.
-            """
-            
-            response = None
-            
-            # Цикл на 10 секунд
-            for remaining in range(10, -1, -1):
-                # Если учитель уже нажал крестик — больше не показываем баннер
-                if not st.session_state.get("close_ad_clicked", False):
-                    with ad_modal.container():
-                        
-                        # Если 10 секунд прошло — показываем активную кнопку/крестик
-                        if remaining == 0:
-                            top_bar_html = """
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                                <span style="font-size: 12px; color: #856404; font-weight: bold;">Рекламная пауза</span>
-                                <span style="color: #28a745; font-weight: bold; font-size: 13px;">✅ Можно закрыть</span>
-                            </div>
-                            """
-                        else:
-                            top_bar_html = f"""
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                                <span style="font-size: 12px; color: #856404; font-weight: bold;">Рекламная пауза</span>
-                                <span style="color: #6c757d; font-size: 12px;">Закрытие через {remaining} сек...</span>
-                            </div>
-                            """
-                        
-                        st.markdown(
-                            f"""
-                            <div style="background-color: #fff3cd; border: 2px solid #ffc107; padding: 15px 20px; border-radius: 12px; text-align: center; margin: 15px 0; position: relative;">
-                                {top_bar_html}
-                                <h4 style="color: #856404; margin: 5px 0 10px 0;">⏳ Идет обработка КТП и составление уроков...</h4>
-                                <hr style="border-top: 1px dashed #ffc107; margin: 10px 0;">
-                                <a href="https://example.com" target="_blank" style="font-size: 17px; font-weight: bold; color: #0d6efd; text-decoration: none;">
-                                    📢 Специальное предложение: Комплект методических материалов для учителей!
-                                </a>
-                                <p style="font-size: 11px; color: #6c757d; margin-top: 6px; margin-bottom: 0;">
-                                    Нажмите на ссылку, чтобы открыть в новой вкладке
-                                </p>
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
-                        
-                        # Появление кнопки «Закрыть ✖» ровно через 10 секунд
-                        if remaining == 0:
-                            if st.button("✖ Закрыть рекламу", key="btn_close_ad"):
-                                st.session_state.close_ad_clicked = True
-                                ad_modal.empty()# Запускаем генерацию Gemini в самом начале цикла
-                if response is None:
-                    response = model.generate_content([prompt, *images])
+        # Основной процесс генерации
+        with st.spinner("🧠 Анализируем КТП и составляем поурочные планы..."):
+            try:
+                images = [Image.open(f) for f in uploaded_files]
+                model = genai.GenerativeModel('gemini-1.5-flash')
+
+                prompt = """
+                Ты — опытный методист школьного образования Кыргызской Республики.
+                Проанализируй представленные фотографии КТП (календарно-тематического плана).
+                Найди ВСЕ темы уроков и состави для каждой из них подробный поурочный план.
                 
-                time.sleep(1)
-            
-            # Парсинг и сборка Word-файла
-            clean_json = response.text.replace("`json", "").replace("```", "").strip()
-            lessons_data = json.loads(clean_json)
-            docx_file = create_multi_lesson_docx(lessons_data)
-            
-            # Автоматически полностью очищаем баннер после завершения работы
-            ad_modal.empty()
-            st.session_state.close_ad_clicked = False
-            
-            st.success(f"✨ Готово! Успешно сформировано планов уроков: {len(lessons_data)}")
-            st.download_button(
-                label="📥 Скачать все поурочные планы в одном Word (.docx)",
-                data=docx_file,
-                file_name="Комплект_поурочных_планов.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                type="primary"
-            )
-            
-        except Exception as e:
-            ad_modal.empty()
-            st.error(f"Произошла ошибка при обработке: {e}")
+                Структура каждого плана:
+                1. Тема урока, класс, предмет.
+                2. Цели урока (обучающая, развивающая, воспитательная).
+                3. Ход урока (Орг. момент, Повторение, Новая тема, Закрепление, Итоги, Д/З).
+                4. Критерии оценивания.
+                
+                Выдай результат четко, красиво и структурировано.
+                """
+
+                response = model.generate_content([prompt] + images)
+                plan_text = response.text
+
+                st.success("🎉 Поурочные планы успешно сгенерированы!")
+                st.markdown("### 📋 Результат:")
+                st.write(plan_text)
+
+                # Создание Word-документа (.docx) для скачивания
+                doc = Document()
+                doc.add_heading("Поурочные планы по КТП", 0)
+                
+                for paragraph in plan_text.split("\n"):
+                    doc.add_paragraph(paragraph)
+                
+                doc_io = io.BytesIO()
+                doc.save(doc_io)
+                doc_io.seek(0)
+
+                st.download_button(
+                    label="📥 Скачать поурочные планы в Word (.docx)",
+                    data=doc_io,
+                    file_name="Поурочные_планы_КТП.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+
+            except Exception as e:
+                st.error(f"❌ Произошла ошибка при обработке: {e}")
