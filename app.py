@@ -156,9 +156,9 @@ with tab1:
               prompt += " Используй также материалы с прикрепленного фото."
               contents[0] = prompt
 
-            # Используем модель gemini-latest
+            # Используем модель gemini-latest-flash
             response = client.models.generate_content(
-                model="gemini-latest", contents=contents
+                model="gemini-latest-flash", contents=contents
             )
             plan_text = response.text
 
