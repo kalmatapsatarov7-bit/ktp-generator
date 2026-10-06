@@ -10,10 +10,20 @@ st.set_page_config(
     page_title="Генератор поурочных планов", page_icon="📚", layout="centered"
 )
 
+# --- РЕКЛАМНЫЙ БЛОК 1: В сайдбаре ---
+st.sidebar.markdown("### 📢 Партнеры и реклама")
+st.sidebar.info(
+    "💡 **Место для вашей рекламы!**\n\n"
+    "Хотите прорекламировать свой образовательный курс, канал или услугу? "
+    "Размещайте баннеры здесь.\n\n"
+    "[Написать менеджеру 👉](https://t.me/your_telegram)"
+)
+st.sidebar.markdown("---")
+
 # Заголовок приложения
-st.title("📚 Генератор поурочных планов (20 уроков)")
+st.title("📚 Умный генератор поурочных планов")
 st.write(
-    "Создавайте комплекс из 20 подробных поурочных планов по теме или по фотографии материалов за пару секунд."
+    "Создавайте поурочные планы по теме или загруженному КТП. Количество уроков подстраивается под ваши материалы автоматически!"
 )
 
 # Настройка API ключа (берётся из секрета Streamlit или вводится вручную)
@@ -41,21 +51,25 @@ input_option = st.radio(
 
 uploaded_image = None
 text_prompt = ""
+custom_lessons_count = 16  # Значение по умолчанию для текстового ввода
 
 if input_option == "Текстовый ввод темы / КТП":
     text_prompt = st.text_area(
         "Введите тему, предмет и класс (например: Русский язык, 7 класс, тема: Имя существительное):",
         placeholder="Укажите предмет, класс и основные разделы темы...",
     )
+    custom_lessons_count = st.slider(
+        "Количество уроков для генерации:", min_value=1, max_value=35, value=16
+    )
 else:
     uploaded_file = st.file_uploader(
-        "Загрузите фото (PNG, JPG, JPEG)", type=["png", "jpg", "jpeg"]
+        "Загрузите фото (страница КТП / учебника)", type=["png", "jpg", "jpeg"]
     )
     if uploaded_file is not None:
         uploaded_image = Image.open(uploaded_file)
         st.image(
             uploaded_image,
-            caption="Загруженное изображение",
+            caption="Загруженное изображение КТП",
             use_container_width=True,
         )
     extra_notes = st.text_input(
@@ -64,8 +78,8 @@ else:
     )
 
 
-# Функция генерации документов через Gemini с обработкой лимитов
-def generate_20_lessons(prompt_content, image_obj=None):
+# Функция генерации документов через Gemini с динамическим количеством уроков и защитой от лимитов
+def generate_lessons_adaptive(prompt_content, image_obj=None, target_count=16):
     generation_config = {
         "temperature": 0.7,
         "max_output_tokens": 8192,
@@ -75,27 +89,35 @@ def generate_20_lessons(prompt_content, image_obj=None):
         model_name=model_name, generation_config=generation_config
     )
 
-    base_instruction = (
-        "Ты — опытный методист и учитель. Твоя задача — составить ровно 20 подробных, "
-        "качественных поурочных планов по стандартам образования. "
-        "Для каждого из 20 уроков распиши: Номер и тему урока, цель, основные этапы урока, "
-        "краткое содержание материала и домашнее задание. "
-        "Структурируй текст четко, используя заголовки для каждого урока (Урок 1, Урок 2 и т.д.)."
-    )
+    if image_obj:
+        base_instruction = (
+            "Ты — опытный методист и учитель. Твоя задача — внимательно проанализировать "
+            "загруженное изображение (КТП) и составить качественные поурочные планы "
+            "строго на каждый урок, указанный в этом материале (сохрани их точное количество и последовательность). "
+            "Для каждого урока распиши: Номер и тему урока, цель, основные этапы урока, "
+            "краткое содержание материала и домашнее задание. Пиши структурировано."
+        )
+    else:
+        base_instruction = (
+            f"Ты — опытный методист и учитель. Твоя задача — составить ровно {target_count} подробных "
+            "поурочных планов по стандартам образования. "
+            "Для каждого урока распиши: Номер и тему урока, цель, основные этапы урока, "
+            "краткое содержание материала и домашнее задание."
+        )
 
     if image_obj:
         contents = [
             base_instruction,
             image_obj,
-            "Используй информацию с этого изображения для составления 20 поурочных планов.",
+            "Извлеки точную структуру и количество уроков с этого изображения и распиши каждый урок.",
         ]
         if prompt_content:
             contents.append(f"Дополнительные пожелания: {prompt_content}")
     else:
         contents = f"{base_instruction}\n\nЗапрос/Тема: {prompt_content}"
 
-    # Попытка генерации с обработкой ошибок API (включая 429 rate limit)
-    max_retries = 3
+    # Надежная защита с ожиданием при превышении лимитов бесплатного тарифа (ошибка 429)
+    max_retries = 4
     for attempt in range(max_retries):
         try:
             response = model.generate_content(contents)
@@ -104,7 +126,8 @@ def generate_20_lessons(prompt_content, image_obj=None):
             error_str = str(e)
             if "429" in error_str or "ResourceExhausted" in error_str:
                 if attempt < max_retries - 1:
-                    time.sleep(5 * (attempt + 1))
+                    wait_time = 15 * (attempt + 1)
+                    time.sleep(wait_time)
                     continue
             raise e
     return None
@@ -113,7 +136,7 @@ def generate_20_lessons(prompt_content, image_obj=None):
 # Функция создания Word-файла в памяти
 def create_docx(text_content):
     doc = Document()
-    doc.add_heading("Комплект поурочных планов (20 уроков)", 0)
+    doc.add_heading("Комплект поурочных планов", 0)
 
     for line in text_content.split("\n"):
         if line.strip().startswith("Урок") or line.strip().startswith("#"):
@@ -129,7 +152,7 @@ def create_docx(text_content):
 
 # Кнопка запуска генерации
 st.markdown("---")
-if st.button("🚀 Сгенерировать 20 поурочных планов", type="primary"):
+if st.button("🚀 Сгенерировать поурочные планы", type="primary"):
     if not api_key:
         st.error("Пожалуйста, укажите API-ключ!")
     elif input_option == "Текстовый ввод темы / КТП" and not text_prompt.strip():
@@ -140,17 +163,21 @@ if st.button("🚀 Сгенерировать 20 поурочных планов
     ):
         st.warning("Пожалуйста, загрузите изображение.")
     else:
-        with st.spinner(
-            "⏳ Идет генерация 20 подробных уроков. Это может занять полминуты..."
-        ):
+        spinner_text = (
+            "⏳ Анализируем КТП с фото и генерируем планы под вашу программу..."
+            if uploaded_image
+            else "⏳ Идет генерация подробных уроков..."
+        )
+        with st.spinner(spinner_text):
             try:
-                result_text = generate_20_lessons(
+                result_text = generate_lessons_adaptive(
                     text_prompt if input_option == "Текстовый ввод темы / КТП" else extra_notes,
                     uploaded_image,
+                    custom_lessons_count,
                 )
 
                 if result_text:
-                    st.success("✅ Все 20 поурочных планов успешно готовы!")
+                    st.success("✅ Поурочные планы успешно готовы!")
                     st.session_state["generated_lessons"] = result_text
                 else:
                     st.error(
@@ -158,7 +185,7 @@ if st.button("🚀 Сгенерировать 20 поурочных планов
                     )
             except Exception as e:
                 st.error(
-                    f"Сервер временно перегружен или превышен лимит запросов (ошибка API): {str(e)}"
+                    f"Сервер временно перегружен или превышен лимит запросов (ошибка API). Подождите минуту и попробуйте снова. Детали: {str(e)}"
                 )
 
 # Вывод результатов и кнопки скачивания, если они есть в памяти
@@ -171,6 +198,21 @@ if "generated_lessons" in st.session_state:
     st.download_button(
         label="📥 Скачать поурочные планы в формате Word (.docx)",
         data=docx_file,
-        file_name="20_Lessons_Plan.docx",
+        file_name="Lessons_Plan.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
+
+# --- РЕКЛАМНЫЙ БЛОК 2: В подвале сайта (в самом низу) ---
+st.markdown("---")
+st.markdown(
+    """
+    <div style="background-color: #f0f2f6; padding: 15px; border-radius: 10px; text-align: center;">
+        <p style="margin: 0; font-weight: bold; color: #31333F;">🌟 Специальное предложение / Реклама</p>
+        <p style="margin: 5px 0 0 0; font-size: 14px; color: #555;">
+            Полезные инструменты, методички и материалы для учителей. Подписывайтесь на наши обновления! 
+            <a href="https://t.me/your_telegram" target="_blank">Узнать подробнее</a>
+        </p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
