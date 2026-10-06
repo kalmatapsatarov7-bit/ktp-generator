@@ -17,6 +17,9 @@ API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 if not API_KEY:
   API_KEY = st.text_input("Google AI Studio API Key", type="password")
 
+# Единая переменная для модели без единой цифры (три слова через дефис)
+GEMINI_MODEL = "gemini-flash-latest"
+
 # Файл для постоянного кэширования планов на сервере
 CACHE_FILE = "lesson_plans_cache.json"
 
@@ -91,9 +94,7 @@ with tab1:
           ],
           key="l_grade",
       )
-      subject = st.selectbox(
-          "Предмет", SUBJECTS_LIST, key="l_subject"
-      )
+      subject = st.selectbox("Предмет", SUBJECTS_LIST, key="l_subject")
 
     with col2:
       lessons_count = st.number_input(
@@ -140,8 +141,7 @@ with tab1:
         with st.spinner("⏳ Генерация поурочного плана с помощью Gemini..."):
           try:
             client = genai.Client(api_key=API_KEY)
-            prompt = (
-                f"Ты — опытный школьный учитель высшей категории. Составь"
+            prompt = (f"Ты — опытный школьный учитель высшей категории. Составь"
                 f" детальный, профессиональный поурочный план по предмету"
                 f" '{subject}' для {grade} по стандарту образования. Тема:"
                 f" '{topic}'. Количество уроков: {lessons_count}. Для каждого"
@@ -156,9 +156,8 @@ with tab1:
               prompt += " Используй также материалы с прикрепленного фото."
               contents[0] = prompt
 
-            # Используем модель gemini-latest-flash
             response = client.models.generate_content(
-                model="gemini-latest-flash", contents=contents
+                model=GEMINI_MODEL, contents=contents
             )
             plan_text = response.text
 
@@ -187,9 +186,7 @@ with tab2:
   )
 
   with st.form("hw_form"):
-    hw_subject = st.selectbox(
-        "Предмет", SUBJECTS_LIST, key="hw_sub"
-    )
+    hw_subject = st.selectbox("Предмет", SUBJECTS_LIST, key="hw_sub")
     hw_question = st.text_area(
         "Напишите текст задания или свой вопрос:",
         placeholder=(
@@ -224,7 +221,7 @@ with tab2:
               f" школьнику разобраться с домашним заданием по предмету"
               f" '{hw_subject}'. Объясни материал максимально понятно,"
               f" доступно, с примерами и пошаговым разбором. Не просто дай"
-              f" готовый ответ, а объясни ученику **почему** и **как** это"
+              f" готовый ответ, а объясни ученику почему и как это"
               f" работает, чтобы он понял суть."
           )
 
@@ -235,17 +232,15 @@ with tab2:
             hw_img = Image.open(hw_file)
             contents.append(hw_img)
 
-          # Используем модель gemini-latest
           response = client.models.generate_content(
-              model="gemini-1.5-flash", contents=contents
+              model=GEMINI_MODEL, contents=contents
           )
 
           st.success("✅ Разбор готов!")
           st.markdown("---")
           st.markdown(response.text)
 
-        except Exception as e:
-          if "429" in str(e) or "ResourceExhausted" in str(e):
+        except Exception as e:if "429" in str(e) or "ResourceExhausted" in str(e):
             st.error(
                 "⚠️ Слишком много запросов к системе (ошибка 429). Пожалуйста,"
                 " подождите минуту и попробуйте снова."
