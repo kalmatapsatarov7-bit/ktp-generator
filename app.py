@@ -237,7 +237,7 @@ with tab2:
 
           # Используем модель gemini-latest
           response = client.models.generate_content(
-              model="gemini-latest", contents=contents
+              model="gemini-1.5-flash", contents=contents
           )
 
           st.success("✅ Разбор готов!")
