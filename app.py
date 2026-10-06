@@ -41,7 +41,25 @@ def save_to_cache(key, plan_text):
     st.error(f"Ошибка сохранения в кэш: {e}")
 
 
-# Выбор режима работы приложения через боковую панель или вкладки
+# Список предметов для выпадающих списков
+SUBJECTS_LIST = [
+    "Русский язык",
+    "Русская литература",
+    "Английский язык",
+    "Математика",
+    "Алгебра",
+    "Геометрия",
+    "Физика",
+    "Химия",
+    "Биология",
+    "История",
+    "Человек и общество",
+    "География",
+    "Информатика",
+    "Другой предмет",
+]
+
+# Выбор режима работы приложения через вкладки
 st.title("📖 Образовательный помощник")
 
 tab1, tab2 = st.tabs(
@@ -74,15 +92,7 @@ with tab1:
           key="l_grade",
       )
       subject = st.selectbox(
-          "Предмет",
-          [
-              "Русский язык",
-              "Русская литература",
-              "Человек и общество",
-              "История",
-              "Другой предмет",
-          ],
-          key="l_subject",
+          "Предмет", SUBJECTS_LIST, key="l_subject"
       )
 
     with col2:
@@ -91,8 +101,7 @@ with tab1:
       )
 
     topic = st.text_input(
-        "Тема урока или раздела (например: Имя существительное, Творчество"
-        " Лермонтова)",
+        "Тема урока или раздела (например: Имя существительное, Present Simple)",
         key="l_topic",
     )
 
@@ -147,8 +156,9 @@ with tab1:
               prompt += " Используй также материалы с прикрепленного фото."
               contents[0] = prompt
 
+            # Используем модель gemini-latest
             response = client.models.generate_content(
-                model="gemini-2.5-flash", contents=contents
+                model="gemini-latest", contents=contents
             )
             plan_text = response.text
 
@@ -160,7 +170,7 @@ with tab1:
           except Exception as e:
             if "429" in str(e) or "ResourceExhausted" in str(e):
               st.error(
-                  "⚠️️ Превышен лимит запросов (ошибка 429). Подождите пару минут"
+                  "⚠️ Превышен лимит запросов (ошибка 429). Подождите пару минут"
                   " или используйте план из кэша."
               )
             else:
@@ -178,21 +188,13 @@ with tab2:
 
   with st.form("hw_form"):
     hw_subject = st.selectbox(
-        "Предмет",
-        [
-            "Русский язык",
-            "Русская литература",
-            "Человек и общество",
-            "История",
-            "Другой",
-        ],
-        key="hw_sub",
+        "Предмет", SUBJECTS_LIST, key="hw_sub"
     )
     hw_question = st.text_area(
         "Напишите текст задания или свой вопрос:",
         placeholder=(
-            "Например: Объясни, как отличить причастие от отглагольного"
-            " прилагательного, или помоги разобрать предложение."
+            "Например: Объясни правило Present Perfect, помоги решить задачу"
+            " по физике или разобрать предложение."
         ),
         key="hw_q",
     )
@@ -233,8 +235,9 @@ with tab2:
             hw_img = Image.open(hw_file)
             contents.append(hw_img)
 
+          # Используем модель gemini-latest
           response = client.models.generate_content(
-              model="gemini-2.5-flash", contents=contents
+              model="gemini-latest", contents=contents
           )
 
           st.success("✅ Разбор готов!")
