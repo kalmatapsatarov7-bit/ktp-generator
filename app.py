@@ -240,7 +240,8 @@ with tab2:
           st.markdown("---")
           st.markdown(response.text)
 
-        except Exception as e:if "429" in str(e) or "ResourceExhausted" in str(e):
+        except Exception as e:
+            if "429" in str(e) or "ResourceExhausted" in str(e):
             st.error(
                 "⚠️ Слишком много запросов к системе (ошибка 429). Пожалуйста,"
                 " подождите минуту и попробуйте снова."
