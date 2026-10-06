@@ -1,218 +1,163 @@
-import io
-import time
+import json
+import os
 import streamlit as st
-from docx import Document
-import google.generativeai as genai
-from PIL import Image
+from google import genai
 
-# Настройка страницы Streamlit
+# Настройка страницы
 st.set_page_config(
-    page_title="Генератор поурочных планов", page_icon="📚", layout="centered"
+    page_title="Генератор КТП и планов уроков", page_icon="📚", layout="centered"
 )
 
-# --- РЕКЛАМНЫЙ БЛОК 1: В сайдбаре ---
-st.sidebar.markdown("### 📢 Партнеры и реклама")
-st.sidebar.info(
-    "💡 **Место для вашей рекламы!**\n\n"
-    "Хотите прорекламировать свой образовательный курс, канал или услугу? "
-    "Размещайте баннеры здесь.\n\n"
-    "[Написать менеджеру 👉](https://t.me/your_telegram)"
-)
-st.sidebar.markdown("---")
+# Настройка ключа API и клиента Gemini
+# (API-ключ можно настроить в Secrets Streamlit или ввести прямо в коде, если нужно)
+API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
-# Заголовок приложения
-st.title("📚 Умный генератор поурочных планов")
-st.write(
-    "Создавайте поурочные планы по теме или загруженному КТП. Количество уроков подстраивается под ваши материалы автоматически!"
-)
+if not API_KEY:
+  st.warning(
+      "⚠️ API-ключ Gemini не найден в настройках. Введите его ниже, чтобы"
+      " генерация работала:"
+  )
+  API_KEY = st.text_input("Google AI Studio API Key", type="password")
 
-# Настройка API ключа (берётся из секрета Streamlit или вводится вручную)
-if "GEMINI_API_KEY" in st.secrets:
-    api_key = st.secrets["GEMINI_API_KEY"]
-else:
-    api_key = st.sidebar.text_input("Введите Gemini API Key", type="password")
-
-if api_key:
-    genai.configure(api_key=api_key)
-else:
-    st.warning(
-        "Пожалуйста, укажите Gemini API Key в настройках secrets или в сайдбаре."
-    )
-
-# Используем актуальный алиас latest
-model_name = "gemini-flash-latest"
-
-# Блок ввода данных
-st.subheader("1. Исходные данные для генерации")
-input_option = st.radio(
-    "Выберите способ ввода темы:",
-    ["Текстовый ввод темы / КТП", "Загрузить фото (страница КТП / учебника)"],
-)
-
-uploaded_image = None
-text_prompt = ""
-custom_lessons_count = 16  # Значение по умолчанию для текстового ввода
-
-if input_option == "Текстовый ввод темы / КТП":
-    text_prompt = st.text_area(
-        "Введите тему, предмет и класс (например: Русский язык, 7 класс, тема: Имя существительное):",
-        placeholder="Укажите предмет, класс и основные разделы темы...",
-    )
-    custom_lessons_count = st.slider(
-        "Количество уроков для генерации:", min_value=1, max_value=35, value=16
-    )
-else:
-    uploaded_file = st.file_uploader(
-        "Загрузите фото (страница КТП / учебника)", type=["png", "jpg", "jpeg"]
-    )
-    if uploaded_file is not None:
-        uploaded_image = Image.open(uploaded_file)
-        st.image(
-            uploaded_image,
-            caption="Загруженное изображение КТП",
-            use_container_width=True,
-        )
-    extra_notes = st.text_input(
-        "Дополнительные пожелания к урокам (необязательно):",
-        placeholder="Например, сделать упор на практические упражнения...",
-    )
+# Файл для постоянного кэширования готовых планов на сервере
+CACHE_FILE = "lesson_plans_cache.json"
 
 
-# Функция генерации документов через Gemini с динамическим количеством уроков и защитой от лимитов
-def generate_lessons_adaptive(prompt_content, image_obj=None, target_count=16):
-    generation_config = {
-        "temperature": 0.7,
-        "max_output_tokens": 8192,
-    }
-
-    model = genai.GenerativeModel(
-        model_name=model_name, generation_config=generation_config
-    )
-
-    if image_obj:
-        base_instruction = (
-            "Ты — опытный методист и учитель. Твоя задача — внимательно проанализировать "
-            "загруженное изображение (КТП) и составить качественные поурочные планы "
-            "строго на каждый урок, указанный в этом материале (сохрани их точное количество и последовательность). "
-            "Для каждого урока распиши: Номер и тему урока, цель, основные этапы урока, "
-            "краткое содержание материала и домашнее задание. Пиши структурировано."
-        )
-    else:
-        base_instruction = (
-            f"Ты — опытный методист и учитель. Твоя задача — составить ровно {target_count} подробных "
-            "поурочных планов по стандартам образования. "
-            "Для каждого урока распиши: Номер и тему урока, цель, основные этапы урока, "
-            "краткое содержание материала и домашнее задание."
-        )
-
-    if image_obj:
-        contents = [
-            base_instruction,
-            image_obj,
-            "Извлеки точную структуру и количество уроков с этого изображения и распиши каждый урок.",
-        ]
-        if prompt_content:
-            contents.append(f"Дополнительные пожелания: {prompt_content}")
-    else:
-        contents = f"{base_instruction}\n\nЗапрос/Тема: {prompt_content}"
-
-    # Надежная защита с ожиданием при превышении лимитов бесплатного тарифа (ошибка 429)
-    max_retries = 4
-    for attempt in range(max_retries):
-        try:
-            response = model.generate_content(contents)
-            return response.text
-        except Exception as e:
-            error_str = str(e)
-            if "429" in error_str or "ResourceExhausted" in error_str:
-                if attempt < max_retries - 1:
-                    wait_time = 15 * (attempt + 1)
-                    time.sleep(wait_time)
-                    continue
-            raise e
-    return None
+def load_cache():
+  """Загружает базу кэша из JSON-файла."""
+  if os.path.exists(CACHE_FILE):
+    try:
+      with open(CACHE_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+    except Exception:
+      return {}
+  return {}
 
 
-# Функция создания Word-файла в памяти
-def create_docx(text_content):
-    doc = Document()
-    doc.add_heading("Комплект поурочных планов", 0)
-
-    for line in text_content.split("\n"):
-        if line.strip().startswith("Урок") or line.strip().startswith("#"):
-            doc.add_heading(line.strip("# "), level=2)
-        elif line.strip():
-            doc.add_paragraph(line)
-
-    file_stream = io.BytesIO()
-    doc.save(file_stream)
-    file_stream.seek(0)
-    return file_stream
+def save_to_cache(key, plan_text):
+  """Сохраняет сгенерированный план в JSON-файл."""
+  cache = load_cache()
+  cache[key] = plan_text
+  try:
+    with open(CACHE_FILE, "w", encoding="utf-8") as f:
+      json.dump(cache, f, ensure_ascii=False, indent=4)
+  except Exception as e:
+    st.error(f"Ошибка сохранения в кэш: {e}")
 
 
-# Кнопка запуска генерации
-st.markdown("---")
-if st.button("🚀 Сгенерировать поурочные планы", type="primary"):
-    if not api_key:
-        st.error("Пожалуйста, укажите API-ключ!")
-    elif input_option == "Текстовый ввод темы / КТП" and not text_prompt.strip():
-        st.warning("Пожалуйста, введите тему урока или КТП.")
-    elif (
-        input_option == "Загрузить фото (страница КТП / учебника)"
-        and uploaded_image is None
-    ):
-        st.warning("Пожалуйста, загрузите изображение.")
-    else:
-        spinner_text = (
-            "⏳ Анализируем КТП с фото и генерируем планы под вашу программу..."
-            if uploaded_image
-            else "⏳ Идет генерация подробных уроков..."
-        )
-        with st.spinner(spinner_text):
-            try:
-                result_text = generate_lessons_adaptive(
-                    text_prompt if input_option == "Текстовый ввод темы / КТП" else extra_notes,
-                    uploaded_image,
-                    custom_lessons_count,
-                )
-
-                if result_text:
-                    st.success("✅ Поурочные планы успешно готовы!")
-                    st.session_state["generated_lessons"] = result_text
-                else:
-                    st.error(
-                        "Не удалось получить ответ от модели. Попробуйте еще раз."
-                    )
-            except Exception as e:
-                st.error(
-                    f"Сервер временно перегружен или превышен лимит запросов (ошибка API). Подождите минуту и попробуйте снова. Детали: {str(e)}"
-                )
-
-# Вывод результатов и кнопки скачивания, если они есть в памяти
-if "generated_lessons" in st.session_state:
-    st.subheader("📖 Результат генерации:")
-    st.markdown(st.session_state["generated_lessons"])
-
-    docx_file = create_docx(st.session_state["generated_lessons"])
-
-    st.download_button(
-        label="📥 Скачать поурочные планы в формате Word (.docx)",
-        data=docx_file,
-        file_name="Lessons_Plan.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    )
-
-# --- РЕКЛАМНЫЙ БЛОК 2: В подвале сайта (в самом низу) ---
-st.markdown("---")
+# Интерфейс приложения
+st.title("📚 Генератор КТП и поурочных планов")
 st.markdown(
-    """
-    <div style="background-color: #f0f2f6; padding: 15px; border-radius: 10px; text-align: center;">
-        <p style="margin: 0; font-weight: bold; color: #31333F;">🌟 Специальное предложение / Реклама</p>
-        <p style="margin: 5px 0 0 0; font-size: 14px; color: #555;">
-            Полезные инструменты, методички и материалы для учителей. Подписывайтесь на наши обновления! 
-            <a href="https://t.me/your_telegram" target="_blank">Узнать подробнее</a>
-        </p>
-    </div>
-    """,
-    unsafe_allow_html=True,
+    "Создавайте учебные планы по стандартам образования. Уже готовые планы"
+    " загружаются **мгновенно и без расхода лимитов**!"
 )
+
+# Форма ввода данных
+with st.form("lesson_form"):
+  col1, col2 = st.columns(2)
+  with col1:
+    grade = st.selectbox(
+        "Класс",
+        [
+            "5 класс",
+            "6 класс",
+            "7 класс",
+            "8 класс",
+            "9 класс",
+            "10 класс",
+            "11 класс",
+        ],
+    )
+    subject = st.selectbox(
+        "Предмет",
+        [
+            "Русский язык",
+            "Русская литература",
+            "Человек и общество",
+            "История",
+            "Другой предмет",
+        ],
+    )
+
+  with col2:
+    plan_type = st.radio(
+        "Тип документа", ["КТП (Календарно-тематический план)", "Поурочный план"]
+    )
+    lessons_count = st.number_input(
+        "Количество уроков / часов", min_value=1, max_value=68, value=20
+    )
+
+  topic = st.text_input(
+      "Тема или раздел (например: Имя существительное, Творчество Лермонтова)"
+  )
+
+  submitted = st.form_submit_button(
+      "🚀 Сгенерировать / Найти в базе", use_container_width=True
+  )
+
+if submitted:
+  if not topic.strip():
+    st.warning("Пожалуйста, введите тему или раздел.")
+  elif not API_KEY:
+    st.error("Пожалуйста, укажите API-ключ Gemini.")
+  else:
+    # Создаем уникальный и стабильный ключ для этой комбинации параметров
+    cache_key = (
+        f"{grade}_{subject}_{plan_type}_{lessons_count}_{topic.strip()}"
+        .lower()
+        .replace(" ", "_")
+    )
+
+    cache = load_cache()
+
+    # 1. ПЕРВЫЙ ДИСК-УРОВЕНЬ: Проверяем, есть ли готовый план в локальном кэше
+    if cache_key in cache:
+      st.success(
+          "⚡ План найден в базе! Загружено мгновенно без запроса к нейросети."
+      )
+      st.markdown("---")
+      st.markdown(cache[cache_key])
+    else:
+      # 2. Если в кэше нет — делаем запрос к Gemini API
+      with st.spinner(
+          "⏳ Идет генерация нового плана с помощью Gemini (это займет пару"
+          " секунд)..."
+      ):
+        try:
+          client = genai.Client(api_key=API_KEY)
+
+          prompt = (
+              f"Ты — опытный учитель высшей категории. Составь детальный"
+              f" профессиональный {plan_type} по предмету '{subject}' для"
+              f" {grade} по стандарту образования. Тема/раздел: '{topic}'. Объем:"
+              f" рассчитано на {lessons_count} уроков. Структурируй материал"
+              f" четко, с указанием тем каждого урока, целей обучения и"
+              f" ожидаемых результатов. Напиши материал на русском языке."
+          )
+
+          # Используем актуальную модель flash
+          response = client.models.generate_content(
+              model="gemini-2.5-flash",
+              contents=prompt,
+          )
+
+          plan_text = response.text
+
+          # Сохраняем в кэш для всех будущих пользователей
+          save_to_cache(cache_key, plan_text)
+
+          st.success(
+              "✅ План успешно сгенерирован и сохранен в общую базу сайта!"
+          )
+          st.markdown("---")
+          st.markdown(plan_text)
+
+        except Exception as e:
+          err_str = str(e)
+          if "429" in err_str or "ResourceExhausted" in err_str:
+            st.error(
+                "⚠️ Превышен лимит бесплатных запросов (ошибка 429). Подождите"
+                " 1-2 минуты или попробуйте тему, которая уже есть в кэше."
+            )
+          else:
+            st.error(f"Произошла ошибка при обращении к API: {e}")
