@@ -29,8 +29,8 @@ else:
         "Пожалуйста, укажите Gemini API Key в настройках secrets или в сайдбаре."
     )
 
-# Выбор модели (используем gemini-1.5-flash)
-model_name = "gemini-1.5-flash"
+# Используем актуальный алиас latest
+model_name = "gemini-flash-latest"
 
 # Блок ввода данных
 st.subheader("1. Исходные данные для генерации")
@@ -66,7 +66,6 @@ else:
 
 # Функция генерации документов через Gemini с обработкой лимитов
 def generate_20_lessons(prompt_content, image_obj=None):
-    # Настраиваем генерацию с увеличенным лимитом токенов для 20 уроков
     generation_config = {
         "temperature": 0.7,
         "max_output_tokens": 8192,
@@ -114,7 +113,8 @@ def generate_20_lessons(prompt_content, image_obj=None):
 # Функция создания Word-файла в памяти
 def create_docx(text_content):
     doc = Document()
-    doc.add_heading("Комплект поурочных планов (20 уроков)", 0)# Разбиваем текст на абзацы и добавляем в документ
+    doc.add_heading("Комплект поурочных планов (20 уроков)", 0)
+
     for line in text_content.split("\n"):
         if line.strip().startswith("Урок") or line.strip().startswith("#"):
             doc.add_heading(line.strip("# "), level=2)
@@ -151,8 +151,6 @@ if st.button("🚀 Сгенерировать 20 поурочных планов
 
                 if result_text:
                     st.success("✅ Все 20 поурочных планов успешно готовы!")
-
-                    # Сохраняем в сессию, чтобы результат не пропадал
                     st.session_state["generated_lessons"] = result_text
                 else:
                     st.error(
@@ -160,7 +158,7 @@ if st.button("🚀 Сгенерировать 20 поурочных планов
                     )
             except Exception as e:
                 st.error(
-Сервер временно перегружен или превышен лимит запросов (ошибка API). Подождите минуту и нажмите кнопку снова.
+                    f"Сервер временно перегружен или превышен лимит запросов (ошибка API): {str(e)}"
                 )
 
 # Вывод результатов и кнопки скачивания, если они есть в памяти
@@ -168,7 +166,6 @@ if "generated_lessons" in st.session_state:
     st.subheader("📖 Результат генерации:")
     st.markdown(st.session_state["generated_lessons"])
 
-    # Создаем файл для скачивания
     docx_file = create_docx(st.session_state["generated_lessons"])
 
     st.download_button(
