@@ -93,7 +93,7 @@ def generate_with_fallback(prompt_text, images=None):
     
     # Если автопоиск не сработал, берем проверенный стандарт
     if not selected_model:
-        selected_model = "gemini-2.0-flash"
+        selected_model = "gemini-3.8-flash"
         
     try:
         response = client.models.generate_content(
