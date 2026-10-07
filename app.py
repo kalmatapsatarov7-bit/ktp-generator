@@ -210,10 +210,10 @@ with tab2:
       st.warning(
           "Пожалуйста, напишите текст задания или прикрепите фотографию."
       )
-        elif not API_KEY:
+        if not API_KEY:
             st.error("Пожалуйста, укажите API-ключ Gemini.")
         
-        with st.spinner("Думаю над объяснением..."):
+            with st.spinner("Думаю над объяснением..."):
             try:
                 client = genai.Client(api_key=API_KEY)
                 hw_prompt = (
