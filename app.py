@@ -12,6 +12,12 @@ st.set_page_config(
 # Получаем API ключ из секретов Streamlit
 API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
+# Инициализация кэша в session_state, чтобы результаты не пропадали
+if "last_result" not in st.session_state:
+    st.session_state.last_result = None
+if "last_title" not in st.session_state:
+    st.session_state.last_title = "Поурочный план"
+
 # Боковая панель (Левая колонка)
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/teacher.png", width=70)
@@ -39,7 +45,7 @@ with st.sidebar:
 
 # Основной контент
 st.title("📚 Помощник Учителя")
-st.markdown("Интерактивный образовательный помощник: поурочные планы (по текстам и фото) и разбор домашних заданий.")
+st.markdown("Интерактивный образовательный помощник: поурочные планы (по текстам и фото) с учетом компетенций и сохранением в кэш.")
 
 # Выбор режима работы
 work_mode = st.selectbox(
@@ -107,33 +113,44 @@ if work_mode == "📝 Генератор Поурочного Плана (Оди
         duration = st.selectbox("Длительность урока:", ["45 минут", "90 минут (пара)"])
         lesson_topic = st.text_input("Тема урока:", placeholder="Например: И.С. Тургенев, рассказ «Муму»")
 
+    competences = st.text_input(
+        "Компетенции (ключевые и предметные):", 
+        placeholder="Например: ПК-1, ПК-2, ОК-1 (или оставить пустым для автоподбора по стандарту КР)"
+    )
     objectives = st.text_area("Цели обучения (если есть конкретные):", placeholder="Например: Понять образ главного героя, развивать навыки анализа текста...")
 
     if st.button("Сгенерировать поурочный план", type="primary"):
         if not subject or not lesson_topic:
             st.warning("⚠️ Пожалуйста, заполните предмет и тему урока.")
         else:
-            with st.spinner("Создаю качественный поурочный план по стандартам..."):
+            with st.spinner("Создаю качественный поурочный план с учетом компетенций по стандартам КР..."):
                 prompt = (
                     f"Ты — опытный методист и школьный учитель в Кыргызстане. "
                     f"Составь подробный профессиональный поурочный план по предмету '{subject}' для {grade}. "
                     f"Длительность урока: {duration}. "
                     f"Тема урока: '{lesson_topic}'. "
+                    f"Компетенции (предметные и ключевые): {competences if competences else 'Определи стандартные ключевые (ПК-1, ПК-2, ПК-3) и предметные компетенции согласно государственному стандарту КР'}. "
                     f"Цели обучения: {objectives if objectives else 'Стандартные по программе'}. "
-                    f"План должен включать: 1. Организационный момент, 2. Опрос домашнего задания / Актуализация знаний, "
-                    f"3. Объяснение нового материала, 4. Закрепление (практические задания), 5. Рефлексия и домашнее задание. "
+                    f"План должен строго включать разделы: "
+                    f"1. Цели и ожидаемые результаты (с указанием формируемых компетенций), "
+                    f"2. Организационный момент, "
+                    f"3. Опрос домашнего задания / Актуализация знаний, "
+                    f"4. Объяснение нового материала, "
+                    f"5. Закрепление (практические задания), "
+                    f"6. Рефлексия и оценивание, "
+                    f"7. Домашнее задание. "
                     f"Пиши структурированно, понятно и профессионально на русском языке."
                 )
                 
                 result_text = generate_with_fallback(prompt)
                 if result_text:
-                    st.success("План готов!")
-                    st.markdown("---")
-                    st.markdown(result_text)
+                    st.session_state.last_result = result_text
+                    st.session_state.last_title = f"Поурочный_план_{subject}_{lesson_topic}"
+                    st.success("План с учетом компетенций готов и сохранен в памяти!")
                 else:
                     st.error("Все модели перегружены. Попробуйте еще раз через минуту.")
 
-# Режим 2: Блок уроков по тексту с бегуніком
+# Режим 2: Блок уроков по тексту с бегунком и компетенциями
 elif work_mode == "📋 Генератор блоком (серия уроков по тексту)":
     st.subheader("📚 Генерация КТП / серии уроков по тексту")
     
@@ -142,63 +159,73 @@ elif work_mode == "📋 Генератор блоком (серия уроков
         block_subject = st.text_input("Предмет:", placeholder="Например: Человек и общество")
         block_grade = st.selectbox("Класс:", ["5 класс", "6 класс", "7 класс", "8 класс", "9 класс", "10 класс", "11 класс"], key="b_grade")
     with col_b2:
-        # Бегунок для точного количества уроков от 5 до 30
         lessons_count = st.slider("Количество уроков в блоке:", min_value=5, max_value=30, value=16, step=1)
         
     section_name = st.text_input("Название раздела или темы четверти:", placeholder="Например: Раздел «Этика и мораль»")
+    block_competences = st.text_input(
+        "Компетенции для блока уроков:", 
+        placeholder="Например: Развитие социально-гражданских и предметных компетенций",
+        key="b_comp"
+    )
     
     if st.button("Сгенерировать блок уроков", type="primary"):
         if not block_subject or not section_name:
             st.warning("⚠️ Укажите предмет и название раздела.")
         else:
-            with st.spinner(f"Разрабатываю календарно-тематический план из {lessons_count} уроков..."):
+            with st.spinner(f"Разрабатываю календарно-тематический план из {lessons_count} уроков с компетенциями..."):
                 prompt = (
                     f"Составь развернутый план-блок ровно из {lessons_count} последовательных уроков по предмету '{block_subject}' для {block_grade} "
                     f"по разделу: '{section_name}'. "
-                    f"Для каждого из {lessons_count} уроков укажи порядковый номер, тему урока, краткое содержание и тип активности учеников. "
+                    f"Учти следующие компетенции: {block_competences if block_competences else 'Стандартные ключевые и предметные компетенции по стандарту КР'}. "
+                    f"Для каждого из {lessons_count} уроков укажи порядковый номер, тему урока, формируемые компетенции, краткое содержание и тип активности учеников. "
                     f"Оформи всё четко и структурированно на русском языке."
                 )
                 result_text = generate_with_fallback(prompt)
                 if result_text:
-                    st.success(f"Блок из {lessons_count} уроков успешно сгенерирован!")
-                    st.markdown("---")
-                    st.markdown(result_text)
+                    st.session_state.last_result = result_text
+                    st.session_state.last_title = f"КТП_{block_subject}_{section_name}"
+                    st.success(f"Блок из {lessons_count} уроков успешно сгенерирован и сохранен в памяти!")
                 else:
                     st.error("Сервер перегружен. Попробуйте еще раз.")
 
-# Режим 3: Генератор поурочных планов по фотографиям с бегунком
+# Режим 3: Генератор поурочных планов по фотографиям с бегунком и компетенциями
 elif work_mode == "📸 Генератор поурочных планов по фото (серия уроков)":
     st.subheader("📸 Создание серии поурочных планов по фотографиям")
-    st.markdown("Загрузите фотографии страниц учебника, оглавления или программы и выберите нужное количество уроков.")
+    st.markdown("Загрузите фотографии страниц учебника, оглавления или программы, выберите количество уроков и укажите акцент на компетенции.")
 
     col_p1, col_p2 = st.columns(2)
     with col_p1:
         photo_subject = st.text_input("Предмет:", placeholder="Например: История Кыргызстана")
         photo_grade = st.selectbox("Класс:", ["5 класс", "6 класс", "7 класс", "8 класс", "9 класс", "10 класс", "11 класс"], key="p_grade")
     with col_p2:
-        # Бегунок для фото-режима
         photo_lessons_count = st.slider("Количество уроков для генерации:", min_value=5, max_value=30, value=16, step=1, key="p_slider")
 
+    photo_competences = st.text_input(
+        "Компетенции (по стандарту КР):", 
+        placeholder="Например: Информационная, коммуникативная, социально-мировоззренческая",
+        key="p_comp"
+    )
     uploaded_files = st.file_uploader("Прикрепите фото страниц учебника/программы", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 
     if st.button("Сгенерировать планы по фото", type="primary"):
         if not uploaded_files:
             st.warning("⚠️ Пожалуйста, прикрепите хотя бы одну фотографию.")
         else:
-            with st.spinner(f"Анализирую фотографии и формирую КТП из {photo_lessons_count} уроков..."):
+            with st.spinner(f"Анализирую фотографии и формирую КТП из {photo_lessons_count} уроков с компетенциями..."):
                 pil_images = [Image.open(f) for f in uploaded_files]
                 prompt = (
                     f"Ты — опытный методист и школьный учитель в Кыргызстане. "
                     f"На основе прикрепленных фотографий страниц учебника или программы по предмету '{photo_subject}' для {photo_grade} "
                     f"составь серию ровно из {photo_lessons_count} поурочных планов, охватывающих материал на фото. "
-                    f"Для каждого урока подробно распиши номер, тему, цель, этапы урока и задания. "
+                    f"Обязательно пропиши для уроков требуемые компетенции: {photo_competences if photo_competences else 'Стандартные предметные и ключевые компетенции по стандартам КР'}. "
+                    f"Для каждого урока подробно распиши номер, тему, цель, компетенции, этапы урока и задания. "
                     f"Пиши на русском языке, структурированно и профессионально."
                 )
                 result_text = generate_with_fallback(prompt, images=pil_images)
                 if result_text:
-                    st.success(f"КТП из {photo_lessons_count} уроков по фотографиям успешно создано!")
-                    st.markdown("---")
-                    st.markdown(result_text)
+                    st.session_state.last_result = result_text
+                    st.session_state.last_title = f"КТП_по_фото_{photo_subject}"
+                    st.success(f"КТП из {photo_lessons_count} уроков по фотографиям успешно создано и сохранено в памяти!")
                 else:
                     st.error("Не удалось обработать фотографии. Попробуйте еще раз.")
 
@@ -229,11 +256,28 @@ else:
                 
                 result_text = generate_with_fallback(hw_prompt, images=img_obj)
                 if result_text:
-                    st.success("Разбор готов!")
-                    st.markdown("---")
-                    st.markdown(result_text)
+                    st.session_state.last_result = result_text
+                    st.session_state.last_title = f"Разбор_ДЗ_{hw_subject}"
+                    st.success("Разбор готов и сохранен в памяти!")
                 else:
                     st.error("Все модели перегружены. Попробуйте повторить запрос.")
+
+# Вывод сохраненного в кэше результата и кнопки скачивания
+if st.session_state.last_result:
+    st.markdown("---")
+    st.subheader("📄 Последний сгенерированный материал:")
+    
+    # Кнопка скачивания файла
+    st.download_button(
+        label="📥 Скачать материалом в файл (.txt)",
+        data=st.session_state.last_result,
+        file_name=f"{st.session_state.last_title}.txt",
+        mime="text/plain",
+        type="primary"
+    )
+    
+    st.markdown("---")
+    st.markdown(st.session_state.last_result)
 
 # Нижний рекламный баннер
 st.markdown("---")
