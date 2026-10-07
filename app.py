@@ -1,6 +1,7 @@
 import streamlit as st
 from google import genai
 from PIL import Image
+import time
 
 # Настройка страницы
 st.set_page_config(
@@ -16,7 +17,7 @@ API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 if "last_result" not in st.session_state:
     st.session_state.last_result = None
 if "last_title" not in st.session_state:
-    st.session_state.last_title = "Поурочный план"
+    st.session_state.last_title = "Поурочный_план"
 
 # Боковая панель (Левая колонка)
 with st.sidebar:
@@ -45,7 +46,7 @@ with st.sidebar:
 
 # Основной контент
 st.title("📚 Помощник Учителя")
-st.markdown("Интерактивный образовательный помощник: поурочные планы (по текстам и фото) с учетом компетенций и сохранением в кэш.")
+st.markdown("Интерактивный образовательный помощник: поурочные планы (по текстам и фото) с учетом компетенций, сохранением в кэш и выгрузкой в файл.")
 
 # Выбор режима работы
 work_mode = st.selectbox(
@@ -64,11 +65,8 @@ st.markdown("---")
 MODELS_TO_TRY = [
     "gemini-2.5-flash",
     "gemini-2.0-flash",
-    "gemini-1.5-flash-latest",
     "gemini-1.5-flash",
-    "gemini-1.5-pro-latest",
-    "gemini-1.5-pro",
-    "gemini-flash-latest"
+    "gemini-1.5-flash-latest"
 ]
 
 def generate_with_fallback(prompt_text, images=None):
@@ -84,21 +82,28 @@ def generate_with_fallback(prompt_text, images=None):
         else:
             contents.append(images)
         
-    response = None
+    # Настройка для разрешения длинных ответов (чтобы КТП не обрывалось)
+    config = {
+        "max_output_tokens": 8192,
+        "temperature": 0.7,
+    }
+    
+    last_error = ""
     for model_name in MODELS_TO_TRY:
         try:
+            time.sleep(1)
             response = client.models.generate_content(
                 model=model_name,
-                contents=contents
+                contents=contents,
+                config=config
             )
             if response and response.text:
                 return response.text
         except Exception as e:
-            err_str = str(e)
-            if "429" in err_str or "ResourceExhausted" in err_str or "503" in err_str:
-                continue
-            else:
-                continue
+            last_error = str(e)
+            continue
+            
+    st.error(f"⚠️ Ошибка генерации: {last_error}. Попробуйте повторить запрос.")
     return None
 
 # Режим 1: Один поурочный план
