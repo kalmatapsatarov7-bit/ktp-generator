@@ -72,7 +72,7 @@ def generate_with_fallback(prompt_text, images=None):
     if not API_KEY:
         st.error("⚠️ Ошибка конфигурации: API-ключ не задан в секретах сервера.")
         return None
-    
+        
     client = genai.Client(api_key=API_KEY)
     contents = [prompt_text]
     if images:
@@ -80,28 +80,31 @@ def generate_with_fallback(prompt_text, images=None):
             contents.extend(images)
         else:
             contents.append(images)
-        
-    config = {
-        "max_output_tokens": 8192,
-        "temperature": 0.7,
-    }
     
-    last_error = ""
-    for model_name in MODELS_TO_TRY:
-        try:
-            time.sleep(1)
-            response = client.models.generate_content(
-                model=model_name,
-                contents=contents,
-                config=config
-            )
-            if response and response.text:
-                return response.text
-        except Exception as e:
-            last_error = str(e)
-            continue
-            
-    st.error(f"⚠️ Не удалось обработать запрос. Ошибка: {last_error}")
+    # Автоматически ищем рабочую flash-модель в аккаунте
+    selected_model = None
+    try:
+        for m in client.models.list():
+            if "flash" in m.name and "generateContent" in m.supported_generation_methods:
+                selected_model = m.name
+                break
+    except Exception:
+        pass
+    
+    # Если автопоиск не сработал, берем проверенный стандарт
+    if not selected_model:
+        selected_model = "gemini-2.0-flash"
+        
+    try:
+        response = client.models.generate_content(
+            model=selected_model,
+            contents=contents
+        )
+        if response and response.text:
+            return response.text
+    except Exception as e:
+        st.error(f"⚠️ Ошибка запроса к модели {selected_model}: {e}")
+        
     return None
 
 # Режим 1: Один поурочный план
