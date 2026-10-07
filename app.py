@@ -13,7 +13,7 @@ st.set_page_config(
 # Получаем API ключ из секретов Streamlit
 API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
-# Инициализация кэша в session_state, чтобы результаты не пропадали
+# Инициализация кэша в session_state
 if "last_result" not in st.session_state:
     st.session_state.last_result = None
 if "last_title" not in st.session_state:
@@ -61,12 +61,11 @@ work_mode = st.selectbox(
 
 st.markdown("---")
 
-# Список моделей для авто-резерва
+# Актуальный список поддерживаемых моделей без устаревших суффиксов
 MODELS_TO_TRY = [
     "gemini-2.5-flash",
     "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-1.5-flash-latest"
+    "gemini-1.5-flash"
 ]
 
 def generate_with_fallback(prompt_text, images=None):
@@ -82,7 +81,6 @@ def generate_with_fallback(prompt_text, images=None):
         else:
             contents.append(images)
         
-    # Настройка для разрешения длинных ответов (чтобы КТП не обрывалось)
     config = {
         "max_output_tokens": 8192,
         "temperature": 0.7,
@@ -103,7 +101,7 @@ def generate_with_fallback(prompt_text, images=None):
             last_error = str(e)
             continue
             
-    st.error(f"⚠️ Ошибка генерации: {last_error}. Попробуйте повторить запрос.")
+    st.error(f"⚠️ Не удалось обработать запрос. Ошибка: {last_error}")
     return None
 
 # Режим 1: Один поурочный план
@@ -152,10 +150,8 @@ if work_mode == "📝 Генератор Поурочного Плана (Оди
                     st.session_state.last_result = result_text
                     st.session_state.last_title = f"Поурочный_план_{subject}_{lesson_topic}"
                     st.success("План с учетом компетенций готов и сохранен в памяти!")
-                else:
-                    st.error("Все модели перегружены. Попробуйте еще раз через минуту.")
 
-# Режим 2: Блок уроков по тексту с бегунком и компетенциями
+# Режим 2: Блок уроков по тексту
 elif work_mode == "📋 Генератор блоком (серия уроков по тексту)":
     st.subheader("📚 Генерация КТП / серии уроков по тексту")
     
@@ -190,10 +186,8 @@ elif work_mode == "📋 Генератор блоком (серия уроков
                     st.session_state.last_result = result_text
                     st.session_state.last_title = f"КТП_{block_subject}_{section_name}"
                     st.success(f"Блок из {lessons_count} уроков успешно сгенерирован и сохранен в памяти!")
-                else:
-                    st.error("Сервер перегружен. Попробуйте еще раз.")
 
-# Режим 3: Генератор поурочных планов по фотографиям с бегунком и компетенциями
+# Режим 3: Генератор поурочных планов по фотографиям
 elif work_mode == "📸 Генератор поурочных планов по фото (серия уроков)":
     st.subheader("📸 Создание серии поурочных планов по фотографиям")
     st.markdown("Загрузите фотографии страниц учебника, оглавления или программы, выберите количество уроков и укажите акцент на компетенции.")
@@ -231,8 +225,6 @@ elif work_mode == "📸 Генератор поурочных планов по 
                     st.session_state.last_result = result_text
                     st.session_state.last_title = f"КТП_по_фото_{photo_subject}"
                     st.success(f"КТП из {photo_lessons_count} уроков по фотографиям успешно создано и сохранено в памяти!")
-                else:
-                    st.error("Не удалось обработать фотографии. Попробуйте еще раз.")
 
 # Режим 4: Помощник ученика / Разбор по фото или тексту
 else:
@@ -264,15 +256,12 @@ else:
                     st.session_state.last_result = result_text
                     st.session_state.last_title = f"Разбор_ДЗ_{hw_subject}"
                     st.success("Разбор готов и сохранен в памяти!")
-                else:
-                    st.error("Все модели перегружены. Попробуйте повторить запрос.")
 
 # Вывод сохраненного в кэше результата и кнопки скачивания
 if st.session_state.last_result:
     st.markdown("---")
     st.subheader("📄 Последний сгенерированный материал:")
     
-    # Кнопка скачивания файла
     st.download_button(
         label="📥 Скачать материалом в файл (.txt)",
         data=st.session_state.last_result,
