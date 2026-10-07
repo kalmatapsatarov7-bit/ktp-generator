@@ -210,7 +210,7 @@ with tab2:
       st.warning(
           "Пожалуйста, напишите текст задания или прикрепите фотографию."
       )
-            elif not API_KEY:
+        elif not API_KEY:
             st.error("Пожалуйста, укажите API-ключ Gemini.")
         
         with st.spinner("Думаю над объяснением..."):
