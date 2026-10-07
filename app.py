@@ -210,72 +210,72 @@ with tab2:
       st.warning(
           "Пожалуйста, напишите текст задания или прикрепите фотографию."
       )
-    elif not API_KEY:
-      st.error("Пожалуйста, укажите API-ключ Gemini.")
-    else:
-    with st.spinner("Думаю над объяснением..."):
-        try:
-            client = genai.Client(api_key=API_KEY)
-            hw_prompt = (
-                f"Ты — дружелюбный, терпеливый и мудрый учитель, который помогает "
-                f"школьнику разобраться с домашним заданием по предмету "
-                f"'{hw_subject}'. Объясни материал максимально понятно, "
-                f"доступно, с примерами и пошаговым разбором. Не просто дай "
-                f"готовый ответ, а объясни ученику почему и как это "
-                f"работает, чтобы он понял суть."
-            )
+            elif not API_KEY:
+            st.error("Пожалуйста, укажите API-ключ Gemini.")
+        
+        with st.spinner("Думаю над объяснением..."):
+            try:
+                client = genai.Client(api_key=API_KEY)
+                hw_prompt = (
+                    f"Ты — дружелюбный, терпеливый и мудрый учитель, который помогает "
+                    f"школьнику разобраться с домашним заданием по предмету "
+                    f"'{hw_subject}'. Объясни материал максимально понятно, "
+                    f"доступно, с примерами и пошаговым разбором. Не просто дай "
+                    f"готовый ответ, а объясни ученику почему и как это "
+                    f"работает, чтобы он понял суть."
+                )
 
-            contents = [hw_prompt]
-            if hw_question.strip():
-                contents.append(f"Задание/Вопрос ученика: {hw_question}")
-            if hw_file is not None:
-                hw_img = Image.open(hw_file)
-                contents.append(hw_img)
+                contents = [hw_prompt]
+                if hw_question.strip():
+                    contents.append(f"Задание/Вопрос ученика: {hw_question}")
+                if hw_file is not None:
+                    hw_img = Image.open(hw_file)
+                    contents.append(hw_img)
 
-            # Список моделей для резервного переключения
-            models_to_try = [
-                GEMINI_MODEL,
-                "gemini-2.5-flash",
-                "gemini-2.0-flash",
-                "gemini-1.5-flash-latest",
-                "gemini-1.5-flash",
-                "gemini-1.5-pro-latest",
-                "gemini-1.5-pro",
-                "gemini-flash-latest"
-            ]
-            response = None
-            success = False
+                # Список моделей для резервного переключения
+                models_to_try = [
+                    GEMINI_MODEL,
+                    "gemini-2.5-flash",
+                    "gemini-2.0-flash",
+                    "gemini-1.5-flash-latest",
+                    "gemini-1.5-flash",
+                    "gemini-1.5-pro-latest",
+                    "gemini-1.5-pro",
+                    "gemini-flash-latest"
+                ]
+                response = None
+                success = False
 
-            for model_name in models_to_try:
-                try:
-                    response = client.models.generate_content(
-                        model=model_name,
-                        contents=contents
+                for model_name in models_to_try:
+                    try:
+                        response = client.models.generate_content(
+                            model=model_name,
+                            contents=contents
+                        )
+                        success = True
+                        break
+                    except Exception as e:
+                        error_str = str(e)
+                        if "429" in error_str or "ResourceExhausted" in error_str or "503" in error_str:
+                            continue
+                        else:
+                            raise e
+
+                if success and response:
+                    st.success("Разбор готов!")
+                    st.markdown("---")
+                    st.markdown(response.text)
+                else:
+                    st.error(
+                        "⚠️ Все доступные модели сейчас перегружены высоким спросом. "
+                        "Пожалуйста, подождите минутку и нажмите кнопку ещё раз."
                     )
-                    success = True
-                    break
-                except Exception as e:
-                    error_str = str(e)
-                    if "429" in error_str or "ResourceExhausted" in error_str or "503" in error_str:
-                        continue
-                    else:
-                        raise e
 
-            if success and response:
-                st.success("Разбор готов!")
-                st.markdown("---")
-                st.markdown(response.text)
-            else:
-                st.error(
-                    "⚠️ Все доступные модели сейчас перегружены высоким спросом. "
-                    "Пожалуйста, подождите минутку и нажмите кнопку ещё раз."
-                )
-
-        except Exception as e:
-            if "429" in str(e) or "ResourceExhausted" in str(e):
-                st.error(
-                    "⚠️ Слишком много запросов к системе (ошибка 429). Пожалуйста, "
-                    "подождите минуту и попробуйте снова."
-                )
-            else:
-                st.error(f"Произошла ошибка: {e}")
+            except Exception as e:
+                if "429" in str(e) or "ResourceExhausted" in str(e):
+                    st.error(
+                        "⚠️ Слишком много запросов к системе (ошибка 429). Пожалуйста, "
+                        "подождите минуту и попробуйте снова."
+                    )
+                else:
+                    st.error(f"Произошла ошибка: {e}")
