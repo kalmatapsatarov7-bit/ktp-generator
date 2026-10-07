@@ -1,281 +1,219 @@
-import json
-import os
 import streamlit as st
 from google import genai
 from PIL import Image
 
 # Настройка страницы
 st.set_page_config(
-    page_title="Учительская и ученическая платформа",
-    page_icon="📖",
-    layout="centered",
+    page_title="Помощник Учителя",
+    page_icon="📚",
+    layout="wide"  # Расширенная разметка, чтобы удобно разместить баннеры по бокам
 )
 
-# Настройка ключа API и клиента Gemini
-API_KEY = st.secrets.get("GEMINI_API_KEY", "")
+# Заголовок приложения
+st.title("📚 Помощник Учителя")
+st.markdown("Интерактивный образовательный помощник: поурочные планы и разбор домашних заданий.")
 
-if not API_KEY:
-  API_KEY = st.text_input("Google AI Studio API Key", type="password")
+# Боковая панель для настроек
+with st.sidebar:
+    st.header("⚙️ Настройки")
+    
+    # Поле для API-ключа
+    API_KEY = st.text_input(
+        "Введите Gemini API Key:",
+        type="password",
+        help="Получите ключ в Google AI Studio."
+    )
+    
+    st.markdown("---")
+    st.markdown("### О программе")
+    st.markdown(
+        "Инструмент создан для быстрой разработки поурочных планов "
+        "и качественного разбора трудных вопросов с учениками."
+    )
 
-# Единая переменная для модели без единой цифры (три слова через дефис)
-GEMINI_MODEL = "gemini-flash-latest"
+# Выбор режима работы
+option = st.selectbox(
+    "Выберите режим работы:",
+    ["📝 Генератор Поурочного Плана", "💬 Консультация по ДЗ и объяснение"]
+)
 
-# Файл для постоянного кэширования планов на сервере
-CACHE_FILE = "lesson_plans_cache.json"
+st.markdown("---")
 
-
-def load_cache():
-  if os.path.exists(CACHE_FILE):
-    try:
-      with open(CACHE_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
-    except Exception:
-      return {}
-  return {}
-
-
-def save_to_cache(key, plan_text):
-  cache = load_cache()
-  cache[key] = plan_text
-  try:
-    with open(CACHE_FILE, "w", encoding="utf-8") as f:
-      json.dump(cache, f, ensure_ascii=False, indent=4)
-  except Exception as e:
-    st.error(f"Ошибка сохранения в кэш: {e}")
-
-
-# Список предметов для выпадающих списков
-SUBJECTS_LIST = [
-    "Русский язык",
-    "Русская литература",
-    "Английский язык",
-    "Математика",
-    "Алгебра",
-    "Геометрия",
-    "Физика",
-    "Химия",
-    "Биология",
-    "История",
-    "Человек и общество",
-    "География",
-    "Информатика",
-    "Другой предмет",
+# Расширенный список моделей (включая твои пожелания: iPad Flash, Jamie on iPad Latest, Jamie Latest, Jamie Latest Flash и др.)
+MODELS_TO_TRY = [
+    "jamie-latest-flash",
+    "ipad-flash",
+    "jamie-on-ipad-latest",
+    "jamie-latest",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-latest",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-latest",
+    "gemini-1.5-flash-latest",
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
+    "gemini-2.5-pro"
 ]
 
-# Выбор режима работы приложения через вкладки
-st.title("📖 Образовательный помощник")
-
-tab1, tab2 = st.tabs(
-    ["📝 Генератор поурочных планов", "💡 Помощник по домашним заданиям"]
-)
-
-# ================= TAB 1: ПОУРОЧНЫЕ ПЛАНЫ (для учителя) =================
-with tab1:
-  st.header("Конструктор поурочных планов")
-  st.markdown(
-      "Создавайте подробные поурочные планы. Загружайте фото материалов или"
-      " вводите тему вручную. Повторные запросы загружаются **мгновенно и без"
-      " расхода лимитов**!"
-  )
-
-  with st.form("lesson_form"):
-    col1, col2 = st.columns(2)
-    with col1:
-      grade = st.selectbox(
-          "Класс",
-          [
-              "5 класс",
-              "6 класс",
-              "7 класс",
-              "8 класс",
-              "9 класс",
-              "10 класс",
-              "11 класс",
-          ],
-          key="l_grade",
-      )
-      subject = st.selectbox("Предмет", SUBJECTS_LIST, key="l_subject")
-
-    with col2:
-      lessons_count = st.number_input(
-          "Количество уроков в теме", min_value=1, max_value=30, value=5, key="l_count"
-      )
-
-    topic = st.text_input(
-        "Тема урока или раздела (например: Имя существительное, Present Simple)",
-        key="l_topic",
-    )
-
-    uploaded_file = st.file_uploader(
-        "📸 Загрузить фото учебника или методички (необязательно)",
-        type=["jpg", "jpeg", "png"],
-        key="l_file",
-    )
-
-    submitted = st.form_submit_button(
-        "🚀 Сгенерировать поурочный план", use_container_width=True
-    )
-
-  if submitted:
-    if not topic.strip() and not uploaded_file:
-      st.warning("Пожалуйста, введите тему или загрузите изображение.")
-    elif not API_KEY:
-      st.error("Пожалуйста, укажите API-ключ Gemini.")
-    else:
-      photo_flag = "with_photo" if uploaded_file else "text_only"
-      cache_key = (
-          f"lesson_{grade}_{subject}_{lessons_count}_{topic.strip()}_{photo_flag}"
-          .lower()
-          .replace(" ", "_")
-      )
-
-      cache = load_cache()
-
-      if cache_key in cache:
-        st.success(
-            "⚡ План найден в базе! Загружено мгновенно без запроса к нейросети."
-        )
-        st.markdown("---")
-        st.markdown(cache[cache_key])
-      else:
-        with st.spinner("⏳ Генерация поурочного плана с помощью Gemini..."):
-          try:
-            client = genai.Client(api_key=API_KEY)
-            prompt = (f"Ты — опытный школьный учитель высшей категории. Составь"
-                f" детальный, профессиональный поурочный план по предмету"
-                f" '{subject}' для {grade} по стандарту образования. Тема:"
-                f" '{topic}'. Количество уроков: {lessons_count}. Для каждого"
-                f" урока распиши: цель, этапы урока, объяснение материала и"
-                f" задания. Напиши материал на русском языке."
-            )
-
-            contents = [prompt]
-            if uploaded_file is not None:
-              img = Image.open(uploaded_file)
-              contents.append(img)
-              prompt += " Используй также материалы с прикрепленного фото."
-              contents[0] = prompt
-
+def generate_with_fallback(client, contents):
+    """Функция автоматического перебора моделей на случай перегрузки"""
+    for model_name in MODELS_TO_TRY:
+        try:
             response = client.models.generate_content(
-                model=GEMINI_MODEL, contents=contents
+                model=model_name,
+                contents=contents
             )
-            plan_text = response.text
-
-            save_to_cache(cache_key, plan_text)
-            st.success("✅ План успешно сгенерирован и сохранен в базу!")
-            st.markdown("---")
-            st.markdown(plan_text)
-
-          except Exception as e:
-            if "429" in str(e) or "ResourceExhausted" in str(e):
-              st.error(
-                  "⚠️ Превышен лимит запросов (ошибка 429). Подождите пару минут"
-                  " или используйте план из кэша."
-              )
+            if response and response.text:
+                return response.text
+        except Exception as e:
+            err_str = str(e)
+            if "429" in err_str or "ResourceExhausted" in err_str or "503" in err_str or "NotFound" in err_str:
+                continue
             else:
-              st.error(f"Произошла ошибка: {e}")
+                continue
+    return None
 
-# ================= TAB 2: ПОМОЩНИК ПО ДОМАШНИМ ЗАДАНИЯМ (для учеников) =================
-with tab2:
-  st.header("💡 Объяснение домашнего задания")
-  st.markdown(
-      "Этот раздел предназначен для учеников. Сюда можно сфоткать сложное"
-      " задание из учебника или написать вопрос, а система подробно и"
-      " понятно объяснит правила, логику и шаг за шагом покажет, почему это"
-      " решается именно так."
-  )
+# ==========================================
+# РАЗМЕЩЕНИЕ С РЕКЛАМНЫМИ БАННЕРАМИ (Слева, Центр, Справа)
+# ==========================================
+col_left, col_center, col_right = st.columns([1, 4, 1])
 
-  with st.form("hw_form"):
-    hw_subject = st.selectbox("Предмет", SUBJECTS_LIST, key="hw_sub")
-    hw_question = st.text_area(
-        "Напишите текст задания или свой вопрос:",
-        placeholder=(
-            "Например: Объясни правило Present Perfect, помоги решить задачу"
-            " по физике или разобрать предложение."
-        ),
-        key="hw_q",
+# Левый рекламный баннер
+with col_left:
+    st.markdown("---")
+    st.markdown("### 📢 Реклама")
+    st.markdown(
+        "<div style='border: 2px dashed #ccc; padding: 15px; text-align: center; border-radius: 10px; color: gray;'>"
+        "<b>Место для левого баннера</b><br><br>Ваша реклама здесь"
+        "</div>", 
+        unsafe_allow_html=True
     )
-    hw_file = st.file_uploader(
-        "📸 Прикрепите фото упражнения или задачи",
-        type=["jpg", "jpeg", "png"],
-        key="hw_f",
-    )
+    st.markdown("---")
 
-    hw_submitted = st.form_submit_button(
-        "🧠 Объяснить мне понятным языком", use_container_width=True
-    )
+# Центральная рабочая область приложения
+with col_center:
+    # РЕЖИМ 1: Генератор Поурочного Плана
+    if option == "📝 Генератор Поурочного Плана":
+        st.subheader("📝 Создание Поурочного Плана")
 
-  if hw_submitted:
-    if not hw_question.strip() and not hw_file:
-      st.warning(
-          "Пожалуйста, напишите текст задания или прикрепите фотографию."
-      )
-        if not API_KEY:
-            st.error("Пожалуйста, укажите API-ключ Gemini.")
-        
-            with st.spinner("Думаю над объяснением..."):
-            try:
-                client = genai.Client(api_key=API_KEY)
-                hw_prompt = (
-                    f"Ты — дружелюбный, терпеливый и мудрый учитель, который помогает "
-                    f"школьнику разобраться с домашним заданием по предмету "
-                    f"'{hw_subject}'. Объясни материал максимально понятно, "
-                    f"доступно, с примерами и пошаговым разбором. Не просто дай "
-                    f"готовый ответ, а объясни ученику почему и как это "
-                    f"работает, чтобы он понял суть."
-                )
+        sub_col1, sub_col2 = st.columns(2)
+        with sub_col1:
+            lesson_subject = st.text_input("Предмет:", placeholder="Например: Литература")
+            lesson_grade = st.selectbox("Класс:", ["5 класс", "6 класс", "7 класс", "8 класс", "9 класс", "10 класс", "11 класс"])
+        with sub_col2:
+            lesson_duration = st.selectbox("Длительность урока:", ["45 минут", "90 минут (пара)"])
 
-                contents = [hw_prompt]
-                if hw_question.strip():
-                    contents.append(f"Задание/Вопрос ученика: {hw_question}")
-                if hw_file is not None:
-                    hw_img = Image.open(hw_file)
-                    contents.append(hw_img)
+        lesson_topic = st.text_input("Тема урока:", placeholder="Например: И.С. Тургенев, рассказ «Муму»")
+        lesson_goals = st.text_area(
+            "Цели обучения (если есть конкретные):",
+            placeholder="Например: Понять образ главного героя, развивать навыки анализа текста..."
+        )
 
-                # Список моделей для резервного переключения
-                models_to_try = [
-                    GEMINI_MODEL,
-                    "gemini-2.5-flash",
-                    "gemini-2.0-flash",
-                    "gemini-1.5-flash-latest",
-                    "gemini-1.5-flash",
-                    "gemini-1.5-pro-latest",
-                    "gemini-1.5-pro",
-                    "gemini-flash-latest"
-                ]
-                response = None
-                success = False
+        lesson_submitted = st.button("Сгенерировать поурочный план", type="primary")
 
-                for model_name in models_to_try:
+        if lesson_submitted:
+            if not lesson_subject.strip() or not lesson_topic.strip():
+                st.warning("Пожалуйста, укажите предмет и тему урока.")
+            elif not API_KEY:
+                st.error("Пожалуйста, укажите API-ключ Gemini в боковой панели слева.")
+            else:
+                with st.spinner("Разрабатываю поурочный план..."):
                     try:
-                        response = client.models.generate_content(
-                            model=model_name,
-                            contents=contents
+                        client = genai.Client(api_key=API_KEY)
+                        prompt = (
+                            f"Ты — высококвалифицированный педагог. Напиши подробный конспект-план "
+                            f"урока по предмету '{lesson_subject}' для {lesson_grade} продолжительностью {lesson_duration}. "
+                            f"Тема урока: '{lesson_topic}'. "
+                            f"Дополнительные цели: {lesson_goals}. "
+                            f"Структура плана должна включать: "
+                            f"1. Организационный момент и мотивация. "
+                            f"2. Актуализация знаний. "
+                            f"3. Изучение нового материала (с вопросами для класса). "
+                            f"4. Этап закрепления и практики. "
+                            f"5. Рефлексия и домашнее задание."
                         )
-                        success = True
-                        break
-                    except Exception as e:
-                        error_str = str(e)
-                        if "429" in error_str or "ResourceExhausted" in error_str or "503" in error_str:
-                            continue
+
+                        result_text = generate_with_fallback(client, prompt)
+
+                        if result_text:
+                            st.success("Поурочный план готов!")
+                            st.markdown("---")
+                            st.markdown(result_text)
                         else:
-                            raise e
+                            st.error("⚠️ Все доступные модели перегружены или недоступны. Попробуйте еще раз через минуту.")
 
-                if success and response:
-                    st.success("Разбор готов!")
-                    st.markdown("---")
-                    st.markdown(response.text)
-                else:
-                    st.error(
-                        "⚠️ Все доступные модели сейчас перегружены высоким спросом. "
-                        "Пожалуйста, подождите минутку и нажмите кнопку ещё раз."
-                    )
+                    except Exception as e:
+                        st.error(f"Произошла ошибка: {e}")
 
-            except Exception as e:
-                if "429" in str(e) or "ResourceExhausted" in str(e):
-                    st.error(
-                        "⚠️ Слишком много запросов к системе (ошибка 429). Пожалуйста, "
-                        "подождите минуту и попробуйте снова."
-                    )
-                else:
-                    st.error(f"Произошла ошибка: {e}")
+    # РЕЖИМ 2: Консультация по ДЗ
+    else:
+        st.subheader("💬 Консультация по ДЗ и объяснение материала")
+        
+        hw_subject = st.text_input("Предмет:", placeholder="Например: Физика или Математика")
+        hw_question = st.text_area("Текст задания или вопрос ученика:", placeholder="Вставьте текст упражнения или опишите вопрос...")
+        hw_file = st.file_uploader("Прикрепить фото задания (необязательно):", type=["png", "jpg", "jpeg"])
+
+        hw_submitted = st.button("Получить объяснение", type="primary")
+
+        if hw_submitted:
+            if not hw_question.strip() and not hw_file:
+                st.warning("Пожалуйста, напишите текст задания или прикрепите фотографию.")
+            elif not API_KEY:
+                st.error("Пожалуйста, укажите API-ключ Gemini в боковой панели слева.")
+            else:
+                with st.spinner("Думаю над объяснением..."):
+                    try:
+                        client = genai.Client(api_key=API_KEY)
+                        hw_prompt = (
+                            f"Ты — дружелюбный, терпеливый и мудрый учитель, который помогает "
+                            f"школьнику разобраться с домашним заданием по предмету "
+                            f"'{hw_subject}'. Объясни материал максимально понятно, "
+                            f"доступно, с примерами и пошаговым разбором. Не просто дай "
+                            f"готовый ответ, а объясни ученику почему и как это "
+                            f"работает, чтобы он понял суть."
+                        )
+
+                        contents = [hw_prompt]
+                        if hw_question.strip():
+                            contents.append(f"Задание/Вопрос ученика: {hw_question}")
+                        if hw_file is not None:
+                            hw_img = Image.open(hw_file)
+                            contents.append(hw_img)
+
+                        result_text = generate_with_fallback(client, contents)
+
+                        if result_text:
+                            st.success("Разбор готов!")
+                            st.markdown("---")
+                            st.markdown(result_text)
+                        else:
+                            st.error(
+                                "⚠️ Все доступные модели сейчас перегружены высоким спросом. "
+                                "Пожалуйста, подождите минутку и нажмите кнопку ещё раз."
+                            )
+
+                    except Exception as e:
+                        st.error(f"Произошла ошибка: {e}")
+
+# Правый рекламный баннер
+with col_right:
+    st.markdown("---")
+    st.markdown("### 📢 Реклама")
+    st.markdown(
+        "<div style='border: 2px dashed #ccc; padding: 15px; text-align: center; border-radius: 10px; color: gray;'>"
+        "<b>Место для правого баннера</b><br><br>Ваша реклама здесь"
+        "</div>", 
+        unsafe_allow_html=True
+    )
+    st.markdown("---")
+
+# ==========================================
+# НИЖНИЙ РЕКЛАМНЫЙ БАННЕР
+# ==========================================
+st.markdown("---")
+st.markdown(
+    "<div style='border: 2px dashed #ccc; padding: 20px; text-align: center; border-radius: 10px; color: gray; background-color: #fafafa;'>"
+    "<b>📢 Рекламный блок внизу страницы</b> — Отличное место для размещения партнерских ссылок или баннера для монетизации проекта."
+    "</div>", 
+    unsafe_allow_html=True
+)
