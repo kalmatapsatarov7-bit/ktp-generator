@@ -63,9 +63,10 @@ st.markdown("---")
 
 # Актуальный список поддерживаемых моделей без устаревших суффиксов
 MODELS_TO_TRY = [
-    "gemini-2.5-flash",
     "gemini-2.0-flash",
-    "gemini-1.5-flash"
+    "gemini-2.5-flash",
+    "gemini-3.8-flash",
+    "gemini-latest-flash",
 ]
 
 def generate_with_fallback(prompt_text, images=None):
