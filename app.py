@@ -231,20 +231,32 @@ with tab2:
           if hw_file is not None:
             hw_img = Image.open(hw_file)
             contents.append(hw_img)
+    # Список моделей для резервного переключения
+    models_to_try = [GEMINI_MODEL, "gemini-1.5-flash", "gemini-1.5-pro"]
+    response = None
+    success = False
 
-          response = client.models.generate_content(
-              model=GEMINI_MODEL, contents=contents
-          )
-
-          st.success("✅ Разбор готов!")
-          st.markdown("---")
-          st.markdown(response.text)
-
-        except Exception as e:
-            if "429" in str(e) or "ResourceExhausted" in str(e):
-              st.error(
-                  "⚠️ Слишком много запросов к системе (ошибка 429). Пожалуйста,"
-                  " подождите минуту и попробуйте снова."
+    for model_name in models_to_try:
+        try:
+            response = client.models.generate_content(
+                model=model_name, 
+                contents=contents
             )
+            success = True
+            break
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str or "ResourceExhausted" in error_str or "503" in error_str:
+                continue
             else:
-                 st.error(f"Произошла ошибка: {e}")
+                raise e
+
+    if success and response:
+        st.success("Разбор готов!")
+        st.markdown("---")
+        st.markdown(response.text)
+    else:
+        st.error(
+            "⚠️ Все доступные модели сейчас перегружены высоким спросом. "
+            "Пожалуйста, подождите минутку и нажмите кнопку ещё раз."
+        )
