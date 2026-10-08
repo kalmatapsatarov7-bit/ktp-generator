@@ -99,6 +99,7 @@ def generate_with_fallback(prompt_text, images=None):
                 return response.text
         except Exception as e:
             last_error = str(e)
+            time.sleep(1)  # небольшая пауза перед запросомк следующей модели
             continue  # Если модель перегружена или недоступна, молча пробуем следующую
             
     st.error(f"⚠️ Ошибка запроса ко всем моделям. Последняя ошибка: {last_error}")
