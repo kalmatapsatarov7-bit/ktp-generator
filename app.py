@@ -80,42 +80,31 @@ def generate_with_fallback(prompt_text, images=None):
         "temperature": 0.7,
     }
 
-    # Список моделей для автоматического переключения при ошибках (503 перегрузка, 404 и т.д.)
+    # Актуальные модели с поддержкой фоллбека
     MODELS_TO_TRY = [
         "gemini-2.5-flash",
-        "gemini-3.8-flash",
         "gemini-1.5-flash",
     ]
 
-    # Список моделей для запроса
-MODELS_TO_TRY = [
-    "gemini-2.5-flash",
-    "gemini-3.8-flash",
-    "gemini-1.5-flash"
-]
-
-last_error = ""
-response = None
-
-for model_name in MODELS_TO_TRY:
-    try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=contents,
-            config=config
-        )
-        if response and response.text:
-            break
-    except Exception as e:
-        last_error = str(e)
-        time.sleep(1)
-        continue
-
-if not response or not response.text:
-    st.error(f"⚠️ Ошибка запроса ко всем моделям. Последняя ошибка: {last_error}") 
+    last_error = ""
+    
+    for model_name in MODELS_TO_TRY:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=contents,
+                config=config
+            )
+            if response and response.text:
+                return response.text
+        except Exception as e:
+            last_error = str(e)
+            time.sleep(1)
+            continue  
+            
+    st.error(f"⚠️ Ошибка запроса ко всем моделям. Последняя ошибка: {last_error}")
     return None
 
-return response.text
 # Режим 1: Один поурочный план
 if work_mode == "📝 Генератор Поурочного Плана (Один урок)":
     st.subheader("🗓️ Создание Поурочного Плана")
@@ -158,7 +147,6 @@ if work_mode == "📝 Генератор Поурочного Плана (Оди
                         "5. Коопсуздук эрежелери жана керектүү жабдуулар. \n"
                         "6. Үй тапшырмасы жана баалоо критерийлери."
                     )
-
                 else:
                     lang_instruction = "Пиши строго на русском языке, используя профессиональную методическую терминологию."
                     structure_instruction = (
