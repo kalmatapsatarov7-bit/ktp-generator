@@ -80,32 +80,40 @@ def generate_with_fallback(prompt_text, images=None):
         "temperature": 0.7,
     }
 
-    # Список актуальных моделей для переключения при нагрузке
-    MODELS_TO_TRY = [
-        "gemini-2.5-flash",
-        "gemini-3.8-flash",
-    ]
+    # Автоматически запрашиваем список доступных моделей у самого API
+    available_models = []
+    try:
+        models_pager = client.models.list()
+        # Ищем модели, поддерживающие генерацию текста / flash
+        for m in models_pager:
+            if "flash" in m.name.lower() or "gemini" in m.name.lower():
+                available_models.append(m.name)
+    except Exception:
+        pass
+
+    # Резервный список на случай сбоя метода list()
+    if not available_models:
+        available_models = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"]
 
     last_error = ""
     
-    # Даем системе пару попыток с паузами на случай пиковых нагрузок (503)
-    for attempt in range(2):
-        for model_name in MODELS_TO_TRY:
-            try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=contents,
-                    config=config
-                )
-                if response and response.text:
-                    return response.text
-            except Exception as e:
-                last_error = str(e)
-                time.sleep(2)
-                continue
-        time.sleep(3)
+    # Перебираем найденные доступные модели
+    for model_name in available_models:
+        try:
+            clean_model_name = model_name.replace("models/", "")
+            response = client.models.generate_content(
+                model=clean_model_name,
+                contents=contents,
+                config=config
+            )
+            if response and response.text:
+                return response.text
+        except Exception as e:
+            last_error = str(e)
+            time.sleep(1)
+            continue
             
-    st.error(f"⚠️ Сервера Google временно перегружены. Попробуйте нажать кнопку еще раз. Ошибка: {last_error}")
+    st.error(f"⚠️ Ошибка запроса ко всем доступным моделям. Детали: {last_error}")
     return None
 
 # Режим 1: Один поурочный план
