@@ -112,7 +112,7 @@ for model_name in MODELS_TO_TRY:
         continue
 
 if not response or not response.text:
-    st.error(f"⚠️ Ошибка запроса ко всем моделям. Последняя ошибка: {last_error}")
+    st.error(f"⚠️ Ошибка запроса ко всем моделям. Последняя ошибка: {last_error}") 
     return None
 
 return response.text
