@@ -84,6 +84,7 @@ def generate_with_fallback(prompt_text, images=None):
     MODELS_TO_TRY = [
         "gemini-2.5-flash",
         "gemini-3.8-flash",
+        "gemini-1.5-flash",
     ]
 
     last_error = ""
