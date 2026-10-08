@@ -80,7 +80,7 @@ def generate_with_fallback(prompt_text, images=None):
         "temperature": 0.7,
     }
 
-    # Актуальные модели с поддержкой фоллбека
+    # Список актуальных моделей для переключения при нагрузке
     MODELS_TO_TRY = [
         "gemini-2.5-flash",
         "gemini-3.8-flash",
@@ -88,21 +88,24 @@ def generate_with_fallback(prompt_text, images=None):
 
     last_error = ""
     
-    for model_name in MODELS_TO_TRY:
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=contents,
-                config=config
-            )
-            if response and response.text:
-                return response.text
-        except Exception as e:
-            last_error = str(e)
-            time.sleep(1)
-            continue  
+    # Даем системе пару попыток с паузами на случай пиковых нагрузок (503)
+    for attempt in range(2):
+        for model_name in MODELS_TO_TRY:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=contents,
+                    config=config
+                )
+                if response and response.text:
+                    return response.text
+            except Exception as e:
+                last_error = str(e)
+                time.sleep(2)
+                continue
+        time.sleep(3)
             
-    st.error(f"⚠️ Ошибка запроса ко всем моделям. Последняя ошибка: {last_error}")
+    st.error(f"⚠️ Сервера Google временно перегружены. Попробуйте нажать кнопку еще раз. Ошибка: {last_error}")
     return None
 
 # Режим 1: Один поурочный план
