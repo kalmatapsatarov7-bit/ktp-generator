@@ -130,8 +130,8 @@ if work_mode == "📝 Генератор Поурочного Плана (Оди
     )
     objectives = st.text_area("Цели обучения (если есть конкретные):", placeholder="Например: Понять образ главного героя, развивать навыки анализа текста...")
 
-        if st.button("Сгенерировать поурочный план", type="primary"):
-            if not subject or not lesson_topic:
+    if st.button("Сгенерировать поурочный план", type="primary"):
+           if not subject or not lesson_topic:
                 st.warning("⚠️ Пожалуйста, заполните предмет и тему урока.")
             else:
                 with st.spinner("Создаю качественный поурочный план с учетом компетенций по стандартам КР..."):
