@@ -83,7 +83,7 @@ def generate_with_fallback(prompt_text, images=None):
     # Актуальные модели с поддержкой фоллбека
     MODELS_TO_TRY = [
         "gemini-2.5-flash",
-        "gemini-1.5-flash",
+        "gemini-3.8-flash",
     ]
 
     last_error = ""
