@@ -133,7 +133,7 @@ if work_mode == "📝 Генератор Поурочного Плана (Оди
     if st.button("Сгенерировать поурочный план", type="primary"):
            if not subject or not lesson_topic:
                 st.warning("⚠️ Пожалуйста, заполните предмет и тему урока.")
-            else:
+           else:
                 with st.spinner("Создаю качественный поурочный план с учетом компетенций по стандартам КР..."):
                     # Все строки ниже сдвинуты вправо (находятся внутри блока with)
                     lesson_lang = st.selectbox(
