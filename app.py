@@ -87,12 +87,15 @@ def generate_with_fallback(prompt_text, images=None):
         "gemini-1.5-flash",
     ]
 
-    last_error = ""
-    try:
-    supported = [m.name for m in client.models.list()]
-    st.write("Доступные модели:", supported)
-except Exception as e:
-    st.write("Ошибка:", e)
+    # Список моделей для запроса
+MODELS_TO_TRY = [
+    "gemini-2.5-flash",
+    "gemini-3.8-flash",
+    "gemini-1.5-flash"
+]
+
+last_error = ""
+response = None
 
 for model_name in MODELS_TO_TRY:
     try:
@@ -102,16 +105,17 @@ for model_name in MODELS_TO_TRY:
             config=config
         )
         if response and response.text:
-            return response.text
+            break
     except Exception as e:
         last_error = str(e)
         time.sleep(1)
         continue
-    
-    
+
+if not response or not response.text:
     st.error(f"⚠️ Ошибка запроса ко всем моделям. Последняя ошибка: {last_error}")
     return None
 
+return response.text
 # Режим 1: Один поурочный план
 if work_mode == "📝 Генератор Поурочного Плана (Один урок)":
     st.subheader("🗓️ Создание Поурочного Плана")
