@@ -74,6 +74,7 @@ def generate_with_fallback(prompt_text, images=None):
         return None
         
     client = genai.Client(api_key=API_KEY)
+    
     contents = [prompt_text]
     if images:
         if isinstance(images, list):
@@ -81,30 +82,34 @@ def generate_with_fallback(prompt_text, images=None):
         else:
             contents.append(images)
     
-    # Автоматически ищем рабочую flash-модель в аккаунте
-    selected_model = None
-    try:
-        for m in client.models.list():
-            if "flash" in m.name and "generateContent" in m.supported_generation_methods:
-                selected_model = m.name
-                break
-    except Exception:
-        pass
+    config = {
+        "max_output_tokens": 8192,
+        "temperature": 0.7,
+    }
+
+    # Список моделей для автоматического переключения при ошибках (503 перегрузка, 404 и т.д.)
+    MODELS_TO_TRY = [
+        "gemini-3.8-flash",
+        "gemini-2.5-flash",
+        "gemini-latest-flash",
+    ]
+
+    last_error = ""
     
-    # Если автопоиск не сработал, берем проверенный стандарт
-    if not selected_model:
-        selected_model = "gemini-3.8-flash"
-        
-    try:
-        response = client.models.generate_content(
-            model=selected_model,
-            contents=contents
-        )
-        if response and response.text:
-            return response.text
-    except Exception as e:
-        st.error(f"⚠️ Ошибка запроса к модели {selected_model}: {e}")
-        
+    for model_name in MODELS_TO_TRY:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=contents,
+                config=config
+            )
+            if response and response.text:
+                return response.text
+        except Exception as e:
+            last_error = str(e)
+            continue  # Если модель перегружена или недоступна, молча пробуем следующую
+            
+    st.error(f"⚠️ Ошибка запроса ко всем моделям. Последняя ошибка: {last_error}")
     return None
 
 # Режим 1: Один поурочный план
