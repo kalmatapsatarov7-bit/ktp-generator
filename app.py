@@ -88,21 +88,27 @@ def generate_with_fallback(prompt_text, images=None):
     ]
 
     last_error = ""
+    try:
+    supported = [m.name for m in client.models.list()]
+    st.write("Доступные модели:", supported)
+except Exception as e:
+    st.write("Ошибка:", e)
+
+for model_name in MODELS_TO_TRY:
+    try:
+        response = client.models.generate_content(
+            model=model_name,
+            contents=contents,
+            config=config
+        )
+        if response and response.text:
+            return response.text
+    except Exception as e:
+        last_error = str(e)
+        time.sleep(1)
+        continue
     
-    for model_name in MODELS_TO_TRY:
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=contents,
-                config=config
-            )
-            if response and response.text:
-                return response.text
-        except Exception as e:
-            last_error = str(e)
-            time.sleep(1)  # небольшая пауза перед запросомк следующей модели
-            continue  # Если модель перегружена или недоступна, молча пробуем следующую
-            
+    
     st.error(f"⚠️ Ошибка запроса ко всем моделям. Последняя ошибка: {last_error}")
     return None
 
