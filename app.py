@@ -83,7 +83,6 @@ def generate_with_fallback(prompt_text, images=None):
     # Список моделей для автоматического переключения при ошибках (503 перегрузка, 404 и т.д.)
     MODELS_TO_TRY = [
         "gemini-3.8-flash",
-        "gemini-2.5-flash",
     ]
 
     last_error = ""
