@@ -13,7 +13,7 @@ st.set_page_config(
 # Получаем API ключ из секретов Streamlit
 API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
-# Настройка библиотеки Gemini
+# Инициализация конфигурации genai
 if API_KEY:
     genai.configure(api_key=API_KEY)
 
@@ -62,9 +62,10 @@ work_mode = st.selectbox(
 st.markdown("---")
 
 def generate_single_call(prompt_text, images=None):
-    if not client:
+    if not API_KEY:
         return "⚠️ Ошибка: API ключ не найден в конфигурации secrets Streamlit."
         
+    # Собираем контент для модели
     contents = [prompt_text]
     if images:
         if isinstance(images, list):
@@ -72,14 +73,13 @@ def generate_single_call(prompt_text, images=None):
         else:
             contents.append(images)
             
-    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+    # Используем проверенные стабильные модели
+    models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
     
     for model_name in models_to_try:
         try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=contents,
-            )
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(contents)
             if response and response.text:
                 return response.text
         except Exception as e:
@@ -116,7 +116,7 @@ if work_mode == "📝 Генератор Поурочного Плана (Оди
                     f"| Этап урока и время | Деятельность учителя | Деятельность ученика | Оценивание / Методические указания |"
                 )
                 res = generate_single_call(prompt)
-                if res:
+                if res and not res.startswith("⚠️"):
                     st.session_state.last_result = res
                     st.session_state.last_title = f"Урок_{subject}_{lesson_topic}"
                     st.success("План готов!")
