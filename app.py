@@ -13,8 +13,9 @@ st.set_page_config(
 # Получаем API ключ из секретов Streamlit
 API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
-# Инициализация клиента genai
-client = genai.Client(api_key=API_KEY) if API_KEY else None
+# Настройка библиотеки Gemini
+if API_KEY:
+    genai.configure(api_key=API_KEY)
 
 # Инициализация кэша в session_state
 if "last_result" not in st.session_state:
