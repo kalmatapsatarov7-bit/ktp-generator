@@ -65,7 +65,6 @@ def generate_single_call(prompt_text, images=None):
     if not API_KEY:
         return "⚠️ Ошибка: API ключ не найден в конфигурации secrets Streamlit."
         
-    # Собираем контент для модели
     contents = [prompt_text]
     if images:
         if isinstance(images, list):
@@ -73,18 +72,15 @@ def generate_single_call(prompt_text, images=None):
         else:
             contents.append(images)
             
-    # Используем проверенные стабильные модели
-    models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
-    
-    for model_name in models_to_try:
-        try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(contents)
-            if response and response.text:
-                return response.text
-        except Exception as e:
-            time.sleep(1.0)
-            continue
+    # Используем стабильную модель и выводим текст ошибки, если она случится
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(contents)
+        if response and response.text:
+            return response.text
+    except Exception as e:
+        return f"⚠️ Ошибка API: {str(e)}"
+        
     return None
 
 # Режим 1: Один урок
@@ -121,7 +117,7 @@ if work_mode == "📝 Генератор Поурочного Плана (Оди
                     st.session_state.last_title = f"Урок_{subject}_{lesson_topic}"
                     st.success("План готов!")
                 else:
-                    st.error("Не удалось сгенерировать план. Проверьте API-ключ или квоты.")
+                    st.error(res if res else "Не удалось сгенерировать план.")
 
 # Режим 2: Поочередный генератор по тексту
 elif work_mode == "📋 Поочередный генератор поурочных планов (серия тем)":
@@ -170,7 +166,8 @@ elif work_mode == "📋 Поочередный генератор поурочн
                     formatted_lesson = f"{page_break}{lesson_result}\n\n"
                     all_lessons_html.append(formatted_lesson)
                 else:
-                    all_lessons_html.append(f"{page_break}### Урок № {i}\n(Ошибка генерации этого урока)\n\n")
+                    err_msg = lesson_result if lesson_result else "Ошибка генерации"
+                    all_lessons_html.append(f"{page_break}### Урок № {i}\n({err_msg})\n\n")
                 
                 time.sleep(1.5)  # Безопасная пауза между запросами
             
@@ -230,7 +227,8 @@ elif work_mode == "📸 Поочередный генератор поурочн
                     formatted_lesson = f"{page_break}{lesson_result}\n\n"
                     all_lessons_html.append(formatted_lesson)
                 else:
-                    all_lessons_html.append(f"{page_break}### Урок № {i}\n(Ошибка генерации)\n\n")
+                    err_msg = lesson_result if lesson_result else "Ошибка генерации"
+                    all_lessons_html.append(f"{page_break}### Урок № {i}\n({err_msg})\n\n")
                     
                 time.sleep(1.5)  # Безопасная пауза
             
@@ -291,7 +289,8 @@ else:
                     formatted_sol = f"{page_break}{solution_result}\n\n"
                     all_solutions_html.append(formatted_sol)
                 else:
-                    all_solutions_html.append(f"{page_break}### Задача № {idx}\n(Ошибка разбора)\n\n")
+                    err_msg = solution_result if solution_result else "Ошибка разбора"
+                    all_solutions_html.append(f"{page_break}### Задача № {idx}\n({err_msg})\n\n")
                     
                 time.sleep(1.0)
             
