@@ -72,16 +72,23 @@ def generate_single_call(prompt_text, images=None):
         else:
             contents.append(images)
             
-    # Используем стабильную модель и выводим текст ошибки, если она случится
-    try:
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        response = model.generate_content(contents)
-        if response and response.text:
-            return response.text
-    except Exception as e:
-        return f"⚠️ Ошибка API: {str(e)}"
-        
-    return None
+    # Перебираем модели по очереди, как ты и хотел
+    models_to_try = ["gemini-1.5-flash", "gemini-2.5-flash", "gemini-3.8-flash"]
+    
+    last_error = ""
+    for model_name in models_to_try:
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(contents)
+            if response and response.text:
+                return response.text
+        except Exception as e:
+            last_error = str(e)
+            time.sleep(1.0)
+            continue
+            
+    # Если ни одна модель не ответила, возвращаем понятную ошибку с деталями
+    return f"⚠️ Ошибка генерации по всем моделям. Последняя ошибка: {last_error}"
 
 # Режим 1: Один урок
 if work_mode == "📝 Генератор Поурочного Плана (Один урок)":
