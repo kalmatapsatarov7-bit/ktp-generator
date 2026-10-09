@@ -19,101 +19,65 @@ if "last_result" not in st.session_state:
 if "last_title" not in st.session_state:
     st.session_state.last_title = "Поурочный_план"
 
-# Боковая панель (Левая колонка)
+# Боковая панель
 with st.sidebar:
-    st.image("https://img.icons8.com/color/96/teacher.png", width=70)
     st.title("Настройки")
-    
-    st.markdown("---")
-    
-    # Рекламный блок слева
-    st.markdown("### 📢 Реклама")
-    st.markdown(
-        """
-        <div style="border: 2px dashed #ccc; padding: 15px; border-radius: 10px; text-align: center; background-color: #f9f9f9; color: #555;">
-            <b>Место для вашего баннера</b><br>
-            Здесь может быть реклама учебных курсов, пособий или партнерских услуг.
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-    
     st.markdown("---")
     st.markdown("### ℹ️ О программе")
     st.markdown(
-        "Инструмент создан для быстрой разработки поурочных планов и КТП по стандартам КР с гарантированным табличным оформлением каждого урока."
+        "Инструмент для глубокой поурочной генерации и поочередного разбора заданий. Каждая задача и каждый план прорабатываются отдельно, а на выходе формируется единый документ с разрывом страниц для каждого урока."
     )
 
 # Основной контент
 st.title("📚 Помощник Учителя КР")
-st.markdown("Интерактивный образовательный помощник: поурочные планы и серии уроков с принудительным табличным выводом для каждого урока.")
+st.markdown("Режим поочередной обработки: каждый элемент (урок или задача) прорабатывается индивидуально и оформляется на отдельной странице.")
 
 # Выбор режима работы
 work_mode = st.selectbox(
     "Выберите режим работы:",
     [
         "📝 Генератор Поурочного Плана (Один урок)",
-        "📋 Генератор блоком (серия уроков по тексту)",
-        "📸 Генератор поурочных планов по фото (серия уроков)",
-        "🔍 Помощник ученика / Разбор ДЗ (Фото или Текст)"
+        "📋 Поочередный генератор поурочных планов (серия тем)",
+        "📸 Поочередный генератор поурочных планов по фото",
+        "🔍 Поочередный разбор ДЗ / Задач ученика"
     ]
 )
 
 st.markdown("---")
 
-def generate_with_fallback(prompt_text, images=None):
+def generate_single_call(prompt_text, images=None):
     if not API_KEY:
-        st.error("⚠️ Ошибка конфигурации: API-ключ не задан в секретах сервера.")
         return None
         
     client = genai.Client(api_key=API_KEY)
-    
     contents = [prompt_text]
     if images:
         if isinstance(images, list):
             contents.extend(images)
         else:
             contents.append(images)
-    
-    # Увеличиваем максимальное количество токенов до 16384, чтобы модели хватало места на таблицы для всех уроков
+            
     config = {
-        "max_output_tokens": 16384,
-        "temperature": 0.5,
+        "max_output_tokens": 8192,
+        "temperature": 0.6,
     }
 
-    available_models = []
-    try:
-        models_pager = client.models.list()
-        for m in models_pager:
-            if "flash" in m.name.lower() or "gemini" in m.name.lower():
-                available_models.append(m.name)
-    except Exception:
-        pass
-
-    if not available_models:
-        available_models = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"]
-
-    last_error = ""
-    
+    available_models = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"]
     for model_name in available_models:
         try:
-            clean_model_name = model_name.replace("models/", "")
             response = client.models.generate_content(
-                model=clean_model_name,
+                model=model_name,
                 contents=contents,
                 config=config
             )
             if response and response.text:
                 return response.text
-        except Exception as e:
-            last_error = str(e)
+        except Exception:
             time.sleep(1)
             continue
-            
-    st.error(f"⚠️ Ошибка запроса ко всем доступным моделям. Детали: {last_error}")
     return None
 
-# Режим 1: Один поурочный план
+# Режим 1: Один урок
 if work_mode == "📝 Генератор Поурочного Плана (Один урок)":
     st.subheader("🗓️ Создание Поурочного Плана")
     
@@ -125,168 +89,233 @@ if work_mode == "📝 Генератор Поурочного Плана (Оди
         duration = st.selectbox("Длительность урока:", ["45 минут", "90 минут (пара)"])
         lesson_topic = st.text_input("Тема урока:", placeholder="Например: И.С. Тургенев, рассказ «Муму»")
 
-    competences = st.text_input(
-        "Компетенции (ключевые и предметные):", 
-        placeholder="Например: ПК-1, ПК-2, ОК-1 (или оставить пустым для автоподбора по стандарту КР)"
-    )
-    objectives = st.text_area("Цели обучения (если есть конкретные):", placeholder="Например: Понять образ главного героя, развивать навыки анализа текста...")
+    competences = st.text_input("Компетенции (необязательно):", placeholder="Например: ПК-1, ПК-2")
+    objectives = st.text_area("Цели обучения (необязательно):", placeholder="Понять образ главного героя...")
     
     if st.button("Сгенерировать поурочный план", type="primary"):
         if not subject or not lesson_topic:
-            st.warning("⚠️ Пожалуйста, заполните предмет и тему урока.")
+            st.warning("⚠️ Заполните предмет и тему урока.")
         else:
-            with st.spinner("Создаю качественный поурочный план с табличной структурой..."):
+            with st.spinner("Создаю качественный план..."):
                 prompt = (
-                    f"Ты — опытный методист и школьный учитель высшей категории в Кыргызстане. "
-                    f"Составь подробный профессиональный поурочный план по предмету '{subject}' для {grade} класса. "
-                    f"Длительность урока: {duration}. Тема урока: {lesson_topic}. "
-                    f"Компетенции для этого урока: {competences if competences else 'Определи стандартные ключевые и предметные компетенции по стандарту КР'}. "
-                    f"Цели обучения: {objectives if objectives else 'Стандартные по программе'}. "
-                    f"СТРОГОЕ ТРЕБОВАНИЕ: Ход урока должен быть оформлен ИСКЛЮЧИТЕЛЬНО в виде полноценной Markdown-таблицы с четырьмя колонками: "
-                    f"| Этап урока и время | Деятельность учителя | Деятельность ученика | Оценивание / Методические указания |. "
-                    f"Не используй списки для хода урока, только таблицу!"
+                    f"Ты — опытный методист в Кыргызстане. Составь подробный профессиональный поурочный план "
+                    f"по предмету '{subject}' для {grade}. Длительность: {duration}. Тема: {lesson_topic}. "
+                    f"Компетенции: {competences if competences else 'Определи по стандарту КР'}. "
+                    f"Цели: {objectives if objectives else 'Стандартные'}. "
+                    f"СТРОГОЕ ТРЕБОВАНИЕ: Ход урока оформи ИСКЛЮЧИТЕЛЬНО в виде Markdown-таблицы с колонками: "
+                    f"| Этап урока и время | Деятельность учителя | Деятельность ученика | Оценивание / Методические указания |"
                 )
+                res = generate_single_call(prompt)
+                if res:
+                    st.session_state.last_result = res
+                    st.session_state.last_title = f"Урок_{subject}_{lesson_topic}"
+                    st.success("План готов!")
 
-            result_text = generate_with_fallback(prompt)
-            if result_text:
-                st.session_state.last_result = result_text
-                st.session_state.last_title = f"Поурочный_план_{subject}_{lesson_topic}"
-                st.success("План с таблицей готов и сохранен в памяти!")
-
-# Режим 2: Блок уроков по тексту
-elif work_mode == "📋 Генератор блоком (серия уроков по тексту)":
-    st.subheader("📚 Генерация КТП / серии уроков по тексту")
+# Режим 2: Поочередный генератор по тексту
+elif work_mode == "📋 Поочередный генератор поурочных планов (серия тем)":
+    st.subheader("📚 Поочередная генерация поурочных планов (серия тем)")
+    st.markdown("Каждый поурочный план генерируется отдельно, получая свои личные цели, компетенции и полноценную таблицу, а затем объединяется в единый документ с разрывом страниц.")
     
     col_b1, col_b2 = st.columns(2)
     with col_b1:
-        block_subject = st.text_input("Предмет:", placeholder="Например: Человек и общество")
-        block_grade = st.selectbox("Класс:", ["5 класс", "6 класс", "7 класс", "8 класс", "9 класс", "10 класс", "11 класс"], key="b_grade")
+        block_subject = st.text_input("Предмет:", placeholder="Например: История Кыргызстана")
+        block_grade = st.selectbox("Класс:", ["5 класс", "6 класс", "7 класс", "8 класс", "9 класс", "10 класс", "11 класс"], key="pb_grade")
     with col_b2:
-        lessons_count = st.slider("Количество уроков в блоке:", min_value=5, max_value=30, value=16, step=1)
+        lessons_count = st.slider("Количество поурочных планов для создания:", min_value=3, max_value=35, value=10, step=1)
         
-    section_name = st.text_input("Название раздела или темы четверти:", placeholder="Например: Раздел «Этика и мораль»")
-    block_competences = st.text_input(
-        "Базовые компетенции:", 
-        placeholder="Например: Развитие социально-гражданских и предметных компетенций",
-        key="b_comp"
-    )
+    section_name = st.text_input("Название раздела / общей темы:", placeholder="Например: Раздел «Древний Кыргызстан»")
     
-    if st.button("Сгенерировать блок уроков", type="primary"):
+    if st.button("Запустить поочередную генерацию", type="primary"):
         if not block_subject or not section_name:
             st.warning("⚠️ Укажите предмет и название раздела.")
         else:
-            with st.spinner(f"Разрабатываю КТП из {lessons_count} уроков с таблицами для каждого урока..."):
-                prompt = (
-                    f"Составь развернутый план-блок ровно из {lessons_count} последовательных уроков по предмету '{block_subject}' для {block_grade} "
-                    f"по разделу: '{section_name}'. "
-                    f"КРИТИЧЕСКИ ВАЖНОЕ ТРЕБОВАНИЕ: "
-                    f"1. Никаких общих вводных списков компетенций в шапке документа! "
-                    f"2. КАЖДЫЙ из ровно {lessons_count} уроков должен начинаться с индивидуального заголовка (например, «Урок № 1...»), своих целей и своих персональных компетенций. "
-                    f"3. ДЛЯ КАЖДОГО ИЗ {lessons_count} УРОКОВ ОБЯЗАТЕЛЬНО нарисуй отдельную полноценную Markdown-таблицу хода урока со следующими колонками: "
-                    f"| Этап урока и время | Деятельность учителя | Деятельность ученика | Оценивание |. "
-                    f"Не пропускай таблицы ни для одного урока! Строго выдержи количество: ровно {lessons_count} уроков. Пиши на русском языке."
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            all_lessons_html = []
+            
+            for i in range(1, lessons_count + 1):
+                status_text.text(f"⏳ Генерирую поурочный план {i} из {lessons_count} (каждый на отдельный лист)...")
+                progress_bar.progress(i / lessons_count)
+                
+                lesson_prompt = (
+                    f"Ты — опытный методист в Кыргызстане. Составь ОДИН отдельный поурочный план (Урок № {i}) "
+                    f"по предмету '{block_subject}' для {block_grade} по разделу '{section_name}'. "
+                    f"Это урок номер {i} из серии в {lessons_count} поурочных планов. Придумай логичную тему для этого урока в рамках раздела. "
+                    f"СТРОГАЯ СТРУКТУРА УРОКА: "
+                    f"1. Заголовок: ### Урок № {i}. [Тема урока] \n"
+                    f"2. Персональные цели этого урока (обучающая, развивающая, воспитательная). \n"
+                    f"3. Персональные компетенции для этого урока (КК и ПК по стандарту КР). \n"
+                    f"4. Ход урока ОБЯЗАТЕЛЬНО оформи в виде полноценной Markdown-таблицы с колонками: "
+                    f"| Этап урока и время | Деятельность учителя | Деятельность ученика | Оценивание | \n"
+                    f"Пиши на русском языке подробно и качественно."
                 )
-                result_text = generate_with_fallback(prompt)
-                if result_text:
-                    st.session_state.last_result = result_text
-                    st.session_state.last_title = f"КТП_{block_subject}_{section_name}"
-                    st.success(f"Блок ровно из {lessons_count} уроков с таблицами успешно сгенерирован!")
+                
+                lesson_result = generate_single_call(lesson_prompt)
+                if lesson_result:
+                    # Добавляем HTML-тег физического разрыва страницы перед каждым новым уроком (начиная со второго)
+                    page_break = '<div style="page-break-after: always; break-after: page;"></div>\n\n' if i > 1 else ''
+                    formatted_lesson = f"{page_break}{lesson_result}\n\n"
+                    all_lessons_html.append(formatted_lesson)
+                else:
+                    page_break = '<div style="page-break-after: always; break-after: page;"></div>\n\n' if i > 1 else ''
+                    all_lessons_html.append(f"{page_break}### Урок № {i}\n(Ошибка генерации этого урока)\n\n")
+                
+                time.sleep(1.0)
+            
+            full_combined_text = f"# Комплекс поурочных планов: {block_subject} — {section_name}\n\n" + "".join(all_lessons_html)
+            
+            st.session_state.last_result = full_combined_text
+            st.session_state.last_title = f"Поурочные_планы_{block_subject}_{section_name}"
+            
+            status_text.text("✅ Все поурочные планы успешно сгенерированы и оформлены по отдельным страницам!")
+            progress_bar.progress(1.0)
+            st.success("Готово! Можете скачать единый документ ниже.")
 
-# Режим 3: Генератор поурочных планов по фотографиям
-elif work_mode == "📸 Генератор поурочных планов по фото (серия уроков)":
-    st.subheader("📸 Создание серии поурочных планов по фотографиям")
-    st.markdown("Загрузите фотографии страниц учебника — каждый урок получит персональные компетенции и собственную таблицу.")
+# Режим 3: Поочередный генератор по фото
+elif work_mode == "📸 Поочередный генератор поурочных планов по фото":
+    st.subheader("📸 Поочередная генерация поурочных планов по фотографиям учебника")
+    st.markdown("Загрузите фото — программа проанализирует их и создаст каждый поурочный план отдельным запросом на новой странице.")
 
     col_p1, col_p2 = st.columns(2)
     with col_p1:
-        photo_subject = st.text_input("Предмет:", placeholder="Например: История Кыргызстана")
-        photo_grade = st.selectbox("Класс:", ["5 класс", "6 класс", "7 класс", "8 класс", "9 класс", "10 класс", "11 класс"], key="p_grade")
+        photo_subject = st.text_input("Предмет:", placeholder="Например: Русская литература", key="pp_sub")
+        photo_grade = st.selectbox("Класс:", ["5 класс", "6 класс", "7 класс", "8 класс", "9 класс", "10 класс", "11 класс"], key="pp_grade")
     with col_p2:
-        photo_lessons_count = st.slider("Количество уроков для генерации:", min_value=5, max_value=30, value=16, step=1, key="p_slider")
+        photo_lessons_count = st.slider("Количество поурочных планов:", min_value=3, max_value=35, value=10, step=1, key="pp_count")
 
-    photo_competences = st.text_input(
-        "Компетенции (по стандарту КР):", 
-        placeholder="Например: Информационная, коммуникативная, социально-мировоззренческая",
-        key="p_comp"
-    )
-    uploaded_files = st.file_uploader("Прикрепите фото страниц учебника/программы", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+    uploaded_files = st.file_uploader("Прикрепите фото страниц программы/учебника", type=["jpg", "jpeg", "png"], accept_multiple_files=True, key="pp_files")
 
-    if st.button("Сгенерировать планы по фото", type="primary"):
+    if st.button("Запустить генерацию по фото", type="primary"):
         if not uploaded_files:
-            st.warning("⚠️ Пожалуйста, прикрепите хотя бы одну фотографию.")
+            st.warning("⚠️ Прикрепите хотя бы одну фотографию.")
         else:
-            with st.spinner(f"Анализирую фото и формирую ровно {photo_lessons_count} уроков с таблицами для каждого..."):
-                pil_images = [Image.open(f) for f in uploaded_files]
-                prompt = (
-                    f"Ты — опытный методист и школьный учитель в Кыргызстане. "
-                    f"На основе прикрепленных фотографий страниц учебника или программы по предмету '{photo_subject}' для {photo_grade} "
-                    f"составь серию ровно из {photo_lessons_count} поурочных планов, охватывающих материал на фото. "
-                    f"КРИТИЧЕСКИ ВАЖНЫЕ ТРЕБОВАНИЯ: "
-                    f"1. Запрещено создавать общие списки компетенций в самом начале документа. "
-                    f"2. КАЖДЫЙ из {photo_lessons_count} уроков должен содержать свои персональные цели и свои конкретные компетенции прямо под своим заголовком. "
-                    f"3. ДЛЯ КАЖДОГО УРОКА ОБЯЗАТЕЛЬНО создай отдельную детализированную Markdown-таблицу хода урока (колонки: "
-                    f"| Этап урока и время | Деятельность учителя | Деятельность ученика | Оценивание |). "
-                    f"Никаких сокращений или списков вместо таблиц! Строго выдержи количество: ровно {photo_lessons_count}. Пиши на русском языке."
+            pil_images = [Image.open(f) for f in uploaded_files]
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            all_lessons_html = []
+            
+            for i in range(1, photo_lessons_count + 1):
+                status_text.text(f"⏳ Анализирую фото и создаю поурочный план {i} из {photo_lessons_count}...")
+                progress_bar.progress(i / photo_lessons_count)
+                
+                lesson_prompt = (
+                    f"Ты — опытный методист в Кыргызстане. Используя прикрепленные фотографии страниц учебника по предмету '{photo_subject}' для {photo_grade}, "
+                    f"составь ОДИН отдельный поурочный план для Урока № {i} (всего планов в серии: {photo_lessons_count}). "
+                    f"СТРОГАЯ СТРУКТУРА: "
+                    f"1. Заголовок: ### Урок № {i}. [Тема по материалам фото] \n"
+                    f"2. Персональные цели урока (обучающая, развивающая, воспитательная). \n"
+                    f"3. Персональные компетенции для этого урока (КК и ПК по стандарту КР). \n"
+                    f"4. Ход урока ОБЯЗАТЕЛЬНО оформи в виде полноценной Markdown-таблицы с колонками: "
+                    f"| Этап урока и время | Деятельность учителя | Деятельность ученика | Оценивание | \n"
+                    f"Пиши на русском языке подробно."
                 )
-                result_text = generate_with_fallback(prompt, images=pil_images)
-                if result_text:
-                    st.session_state.last_result = result_text
-                    st.session_state.last_title = f"КТП_по_фото_{photo_subject}"
-                    st.success(f"КТП из {photo_lessons_count} уроков с таблицами успешно создано!")
+                
+                lesson_result = generate_single_call(lesson_prompt, images=pil_images)
+                if lesson_result:
+                    page_break = '<div style="page-break-after: always; break-after: page;"></div>\n\n' if i > 1 else ''
+                    formatted_lesson = f"{page_break}{lesson_result}\n\n"
+                    all_lessons_html.append(formatted_lesson)
+                else:
+                    page_break = '<div style="page-break-after: always; break-after: page;"></div>\n\n' if i > 1 else ''
+                    all_lessons_html.append(f"{page_break}### Урок № {i}\n(Ошибка генерации)\n\n")
+                    
+                time.sleep(1.0)
+            
+            full_combined_text = f"# Комплекс поурочных планов по фото: {photo_subject} ({photo_grade})\n\n" + "".join(all_lessons_html)
+            
+            st.session_state.last_result = full_combined_text
+            st.session_state.last_title = f"Поурочные_планы_по_фото_{photo_subject}"
+            
+            status_text.text("✅ Все поурочные планы по фото успешно созданы на отдельных страницах!")
+            progress_bar.progress(1.0)
+            st.success("Готово! Материалы скомбинированы в единый документ.")
 
-# Режим 4: Помощник ученика / Разбор по фото или тексту
+# Режим 4: Поочередный разбор ДЗ / Задач ученика
 else:
-    st.subheader("🔍 Помощник Ученика / Разбор ДЗ")
-    st.markdown("Сфотографируйте страницу с упражнением или введите текст задачи, чтобы получить понятный пошаговый разбор.")
+    st.subheader("🔍 Поочередный разбор ДЗ / Задач ученика")
+    st.markdown("Если ученик скинул несколько задач или вопросов, программа разберет их **строго по очереди**, каждую задачу на отдельной странице.")
+    
+    hw_subject = st.text_input("Предмет:", placeholder="Например: Алгебра / Физика")
+    hw_questions_text = st.text_area("Список вопросов или заданий (каждое с новой строки):", placeholder="1. Решить уравнение 2x + 5 = 15\n2. Найти площадь круга...")
+    hw_files = st.file_uploader("Прикрепить фото с задачами (можно несколько)", type=["jpg", "jpeg", "png"], accept_multiple_files=True, key="hw_files")
 
-    hw_subject = st.text_input("Предмет задания:", placeholder="Например: Алгебра, Русский язык, Физика")
-    hw_question = st.text_area("Текст задания / Вопрос ученика:", placeholder="Напишите условие задачи или вопрос...")
-    hw_file = st.file_uploader("Прикрепите фото упражнения или задачи", type=["jpg", "jpeg", "png"], key="hw_single")
-
-    if st.button("Объяснить понятным языком", type="primary"):
-        if not hw_question.strip() and not hw_file:
-            st.warning("⚠️ Пожалуйста, напишите текст задания или прикрепите фотографию.")
+    if st.button("Запустить поочередный разбор задач", type="primary"):
+        if not hw_questions_text.strip() and not hw_files:
+            st.warning("⚠️ Введите текст заданий или прикрепите фотографии.")
         else:
-            with st.spinner("Думаю над объяснением..."):
-                hw_prompt = (
-                    f"Ты — дружелюбный, терпеливый и мудрый учитель, который помогает "
-                    f"школьнику разобраться с домашним заданием по предмету '{hw_subject}'. "
-                    f"Объясни материал максимально понятно, доступно, с примерами и пошаговым разбором. "
-                    f"Если применимо, используй небольшие таблицы для наглядности сравнений или формул."
+            raw_tasks = [t.strip() for t in hw_questions_text.split("\n") if t.strip()]
+            if not raw_tasks:
+                raw_tasks = ["Задачи с прикрепленных фотографий"]
+                
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            all_solutions_html = []
+            total_tasks = len(raw_tasks)
+            
+            pil_images = [Image.open(f) for f in hw_files] if hw_files else None
+            
+            for idx, task_item in enumerate(raw_tasks, 1):
+                status_text.text(f"⏳ Разбираю задачу {idx} из {total_tasks}...")
+                progress_bar.progress(idx / total_tasks)
+                
+                task_prompt = (
+                    f"Ты — опытный учитель и репетитор по предмету '{hw_subject}'. "
+                    f"Разбери СТРОГО ОДНУ конкретную задачу (Задача № {idx}): '{task_item}'. "
+                    f"Если прикреплены фотографии, ориентируйся на них. "
+                    f"СТРОГАЯ СТРУКТУРА РАЗБОРА: "
+                    f"1. Заголовок: ### Задача № {idx} \n"
+                    f"2. Условие. \n"
+                    f"3. Пошаговое решение с подробным объяснением каждого действия. \n"
+                    f"4. Ответ. \n"
+                    f"Пиши понятно и доступно на русском языке."
                 )
                 
-                img_obj = Image.open(hw_file) if hw_file else None
-                if hw_question.strip():
-                    hw_prompt += f"\n\nЗадание/Вопрос ученика: {hw_question}"
-                
-                result_text = generate_with_fallback(hw_prompt, images=img_obj)
-                if result_text:
-                    st.session_state.last_result = result_text
-                    st.session_state.last_title = f"Разбор_ДЗ_{hw_subject}"
-                    st.success("Разбор готов и сохранен в памяти!")
+                solution_result = generate_single_call(task_prompt, images=pil_images)
+                if solution_result:
+                    page_break = '<div style="page-break-after: always; break-after: page;"></div>\n\n' if idx > 1 else ''
+                    formatted_sol = f"{page_break}{solution_result}\n\n"
+                    all_solutions_html.append(formatted_sol)
+                else:
+                    page_break = '<div style="page-break-after: always; break-after: page;"></div>\n\n' if idx > 1 else ''
+                    all_solutions_html.append(f"{page_break}### Задача № {idx}\n(Ошибка разбора)\n\n")
+                    
+                time.sleep(1.0)
+            
+            full_combined_solutions = f"# Поочередный разбор ДЗ / Задач по предмету: {hw_subject}\n\n" + "".join(all_solutions_html)
+            
+            st.session_state.last_result = full_combined_solutions
+            st.session_state.last_title = f"Разбор_ДЗ_{hw_subject}"
+            
+            status_text.text("✅ Все задачи успешно разобщены и оформлены на отдельных страницах!")
+            progress_bar.progress(1.0)
+            st.success("Готово! Решения сформированы.")
 
-# Вывод сохраненного в кэше результата и кнопки скачивания
+# Блок вывода результатов и скачивания
 if st.session_state.last_result:
     st.markdown("---")
-    st.subheader("📄 Последний сгенерированный материал:")
+    st.subheader("📄 Сгенерированный материал:")
     
     st.download_button(
-        label="📥 Скачать материалом в файл (.txt)",
+        label="📥 Скачать единый документ (.txt / открыть можно в Word)",
         data=st.session_state.last_result,
         file_name=f"{st.session_state.last_title}.txt",
         mime="text/plain",
         type="primary"
     )
-    
+            
     st.markdown("---")
-    st.markdown(st.session_state.last_result)
+    st.markdown(st.session_state.last_result, unsafe_allow_html=True)
 
-# Нижний рекламный баннер
+# Рекламный блок внизу страницы
 st.markdown("---")
 st.markdown(
     """
     <div style="border: 2px dashed #bbb; padding: 20px; border-radius: 10px; text-align: center; background-color: #fcfcfc; color: #666;">
-        📢 <b>Рекламный блок внизу страницы</b> — Отлично подходит для размещения партнерских ссылок или баннера для монетизации проекта.
+        📢 <b>Приложение для создания поурочных планов</b><br>
+        <span style="font-size: 13px; color: #888;">Качественные поурочные разработки для учителей школ</span>
     </div>
     """,
     unsafe_allow_html=True
