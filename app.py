@@ -13,6 +13,9 @@ st.set_page_config(
 # Получаем API ключ из секретов Streamlit
 API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
+# Инициализация клиента genai
+client = genai.Client(api_key=API_KEY) if API_KEY else None
+
 # Инициализация кэша в session_state
 if "last_result" not in st.session_state:
     st.session_state.last_result = None
@@ -46,10 +49,9 @@ work_mode = st.selectbox(
 st.markdown("---")
 
 def generate_single_call(prompt_text, images=None):
-    if not API_KEY:
-        return None
+    if not client:
+        return "⚠️ Ошибка: API ключ не найден в конфигурации secrets Streamlit."
         
-    client = genai.Client(api_key=API_KEY)
     contents = [prompt_text]
     if images:
         if isinstance(images, list):
@@ -57,23 +59,18 @@ def generate_single_call(prompt_text, images=None):
         else:
             contents.append(images)
             
-    config = {
-        "max_output_tokens": 8192,
-        "temperature": 0.6,
-    }
-
-    available_models = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"]
-    for model_name in available_models:
+    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+    
+    for model_name in models_to_try:
         try:
             response = client.models.generate_content(
                 model=model_name,
                 contents=contents,
-                config=config
             )
             if response and response.text:
                 return response.text
         except Exception:
-            time.sleep(1)
+            time.sleep(0.5)
             continue
     return None
 
@@ -110,6 +107,8 @@ if work_mode == "📝 Генератор Поурочного Плана (Оди
                     st.session_state.last_result = res
                     st.session_state.last_title = f"Урок_{subject}_{lesson_topic}"
                     st.success("План готов!")
+                else:
+                    st.error("Не удалось сгенерировать план. Проверьте API-ключ или квоты.")
 
 # Режим 2: Поочередный генератор по тексту
 elif work_mode == "📋 Поочередный генератор поурочных планов (серия тем)":
@@ -152,16 +151,15 @@ elif work_mode == "📋 Поочередный генератор поурочн
                 )
                 
                 lesson_result = generate_single_call(lesson_prompt)
-                if lesson_result:
-                    # Добавляем HTML-тег физического разрыва страницы перед каждым новым уроком (начиная со второго)
-                    page_break = '<div style="page-break-after: always; break-after: page;"></div>\n\n' if i > 1 else ''
+                page_break = '<div style="page-break-after: always; break-after: page;"></div>\n\n' if i > 1 else ''
+                
+                if lesson_result and not lesson_result.startswith("⚠️"):
                     formatted_lesson = f"{page_break}{lesson_result}\n\n"
                     all_lessons_html.append(formatted_lesson)
                 else:
-                    page_break = '<div style="page-break-after: always; break-after: page;"></div>\n\n' if i > 1 else ''
                     all_lessons_html.append(f"{page_break}### Урок № {i}\n(Ошибка генерации этого урока)\n\n")
                 
-                time.sleep(1.0)
+                time.sleep(0.5)
             
             full_combined_text = f"# Комплекс поурочных планов: {block_subject} — {section_name}\n\n" + "".join(all_lessons_html)
             
@@ -213,15 +211,15 @@ elif work_mode == "📸 Поочередный генератор поурочн
                 )
                 
                 lesson_result = generate_single_call(lesson_prompt, images=pil_images)
-                if lesson_result:
-                    page_break = '<div style="page-break-after: always; break-after: page;"></div>\n\n' if i > 1 else ''
+                page_break = '<div style="page-break-after: always; break-after: page;"></div>\n\n' if i > 1 else ''
+                
+                if lesson_result and not lesson_result.startswith("⚠️"):
                     formatted_lesson = f"{page_break}{lesson_result}\n\n"
                     all_lessons_html.append(formatted_lesson)
                 else:
-                    page_break = '<div style="page-break-after: always; break-after: page;"></div>\n\n' if i > 1 else ''
                     all_lessons_html.append(f"{page_break}### Урок № {i}\n(Ошибка генерации)\n\n")
                     
-                time.sleep(1.0)
+                time.sleep(0.5)
             
             full_combined_text = f"# Комплекс поурочных планов по фото: {photo_subject} ({photo_grade})\n\n" + "".join(all_lessons_html)
             
@@ -274,15 +272,15 @@ else:
                 )
                 
                 solution_result = generate_single_call(task_prompt, images=pil_images)
-                if solution_result:
-                    page_break = '<div style="page-break-after: always; break-after: page;"></div>\n\n' if idx > 1 else ''
+                page_break = '<div style="page-break-after: always; break-after: page;"></div>\n\n' if idx > 1 else ''
+                
+                if solution_result and not solution_result.startswith("⚠️"):
                     formatted_sol = f"{page_break}{solution_result}\n\n"
                     all_solutions_html.append(formatted_sol)
                 else:
-                    page_break = '<div style="page-break-after: always; break-after: page;"></div>\n\n' if idx > 1 else ''
                     all_solutions_html.append(f"{page_break}### Задача № {idx}\n(Ошибка разбора)\n\n")
                     
-                time.sleep(1.0)
+                time.sleep(0.5)
             
             full_combined_solutions = f"# Поочередный разбор ДЗ / Задач по предмету: {hw_subject}\n\n" + "".join(all_solutions_html)
             
