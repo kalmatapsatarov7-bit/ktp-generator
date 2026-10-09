@@ -30,6 +30,18 @@ with st.sidebar:
     st.markdown(
         "Инструмент для глубокой поурочной генерации и поочередного разбора заданий. Каждая задача и каждый план прорабатываются отдельно, а на выходе формируется единый документ с разрывом страниц для каждого урока."
     )
+    
+    st.markdown("---")
+    # Рекламный блок в сайдбаре слева
+    st.markdown(
+        """
+        <div style="border: 2px dashed #ccc; padding: 15px; border-radius: 8px; text-align: center; background-color: #fafafa; color: #666;">
+            📢 <b>Приложение для учителей</b><br>
+            <span style="font-size: 12px; color: #888;">Качественные разработки для школ КР</span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 # Основной контент
 st.title("📚 Помощник Учителя КР")
@@ -69,8 +81,8 @@ def generate_single_call(prompt_text, images=None):
             )
             if response and response.text:
                 return response.text
-        except Exception:
-            time.sleep(0.5)
+        except Exception as e:
+            time.sleep(1.0)
             continue
     return None
 
@@ -134,7 +146,7 @@ elif work_mode == "📋 Поочередный генератор поурочн
             all_lessons_html = []
             
             for i in range(1, lessons_count + 1):
-                status_text.text(f"⏳ Генерирую поурочный план {i} из {lessons_count} (каждый на отдельный лист)...")
+                status_text.text(f"⏳ Генерирую поурочный план {i} из {lessons_count} (пауза для стабильности)...")
                 progress_bar.progress(i / lessons_count)
                 
                 lesson_prompt = (
@@ -159,7 +171,7 @@ elif work_mode == "📋 Поочередный генератор поурочн
                 else:
                     all_lessons_html.append(f"{page_break}### Урок № {i}\n(Ошибка генерации этого урока)\n\n")
                 
-                time.sleep(0.5)
+                time.sleep(1.5)  # Безопасная пауза между запросами
             
             full_combined_text = f"# Комплекс поурочных планов: {block_subject} — {section_name}\n\n" + "".join(all_lessons_html)
             
@@ -219,7 +231,7 @@ elif work_mode == "📸 Поочередный генератор поурочн
                 else:
                     all_lessons_html.append(f"{page_break}### Урок № {i}\n(Ошибка генерации)\n\n")
                     
-                time.sleep(0.5)
+                time.sleep(1.5)  # Безопасная пауза
             
             full_combined_text = f"# Комплекс поурочных планов по фото: {photo_subject} ({photo_grade})\n\n" + "".join(all_lessons_html)
             
@@ -280,7 +292,7 @@ else:
                 else:
                     all_solutions_html.append(f"{page_break}### Задача № {idx}\n(Ошибка разбора)\n\n")
                     
-                time.sleep(0.5)
+                time.sleep(1.0)
             
             full_combined_solutions = f"# Поочередный разбор ДЗ / Задач по предмету: {hw_subject}\n\n" + "".join(all_solutions_html)
             
