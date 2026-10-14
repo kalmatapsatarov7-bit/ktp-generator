@@ -1,7 +1,6 @@
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
-import time
 
 st.set_page_config(
     page_title="Помощник Учителя КР",
@@ -63,14 +62,21 @@ def generate_call(prompt_text, images=None):
         else:
             contents.append(images)
             
-    try:
-        model = genai.GenerativeModel("gemini-3.8")
-        response = model.generate_content(contents)
-        if response and response.text:
-            return response.text
-    except Exception as e:
-        return f"⚠️ Ошибка: {str(e)}"
-    return "⚠️ Не удалось получить ответ."
+    # Используем рабочие и поддерживаемые SDK названия моделей
+    models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
+    
+    last_err = ""
+    for m_name in models_to_try:
+        try:
+            model = genai.GenerativeModel(m_name)
+            response = model.generate_content(contents)
+            if response and response.text:
+                return response.text
+        except Exception as e:
+            last_err = str(e)
+            continue
+            
+    return f"⚠️ Ошибка генерации: {last_err}"
 
 # Режим 1: Один урок
 if work_mode == "📝 Генератор Поурочного Плана (Один урок)":
